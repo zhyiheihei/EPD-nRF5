@@ -543,14 +543,16 @@ function decodeProcessedData(processedData, width, height, mode) {
   if (mode === 'sixColor') {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const newIndex = (x * height) + (height - 1 - y);
-        const value = processedData[newIndex];
-        const color = rgbPalette.find(c => c.value === value) || rgbPalette[1]; // 默认白色
+        const newIndex = (y * width + x) >> 1;
+        const colorValue = (x % 2 === 0)
+          ? (processedData[newIndex] >> 4) & 0x0F
+          : processedData[newIndex] & 0x0F;
+        const color = rgbPalette.find(c => c.value === colorValue) || rgbPalette[1]; // 默认白色
         const index = (y * width + x) * 4;
         data[index] = color.r;
         data[index + 1] = color.g;
         data[index + 2] = color.b;
-        data[index + 3] = 255; // Alpha 透明度
+        data[index + 3] = 255;
       }
     }
   } else if (mode === 'fourColor') {
@@ -625,17 +627,21 @@ function processImageData(imageData, mode) {
   let processedData;
 
   if (mode === 'sixColor') {
-    processedData = new Uint8Array(width * height);
+    processedData = new Uint8Array(Math.ceil((width * height) / 2)); // 4bpp
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const index = (y * width + x) * 4;
         const r = data[index];
         const g = data[index + 1];
         const b = data[index + 2];
-
         const closest = findClosestColor(r, g, b, mode);
-        const newIndex = (x * height) + (height - 1 - y);
-        processedData[newIndex] = closest.value;
+        const colorValue = closest.value; // 0-5
+        const newIndex = (y * width + x) >> 1;
+        if (x % 2 === 0) {
+          processedData[newIndex] |= (colorValue << 4);
+        } else {
+          processedData[newIndex] |= colorValue;
+        }
       }
     }
   } else if (mode === 'fourColor') {

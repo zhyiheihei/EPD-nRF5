@@ -223,9 +223,7 @@ async function sendimg() {
 
   await write(EpdCmd.INIT);
 
-  if (ditherMode === 'fourColor') {
-    await writeImage(processedData, 'color');
-  } else if (ditherMode === 'threeColor') {
+  if (ditherMode === 'threeColor') {
     const halfLength = Math.floor(processedData.length / 2);
     const blackWhiteData = processedData.slice(0, halfLength);
     const redWhiteData = processedData.slice(halfLength);
@@ -242,6 +240,8 @@ async function sendimg() {
     } else {
       await writeImage(processedData, 'bw');
     }
+  } else if (ditherMode === 'fourColor' || ditherMode === 'sixColor') {
+    await writeImage(processedData, 'bw');
   } else {
     addLog("当前固件不支持此颜色模式。");
     updateButtonStatus();
