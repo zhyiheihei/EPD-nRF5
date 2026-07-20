@@ -227,20 +227,20 @@
 				</div>
 			</div>
 		</fieldset>
-		<fieldset id="dashboard-text-panel">
+		<fieldset id="dashboard-text-panel" class="dashboard-form">
 			<legend>日程与食品字符位图</legend>
 			<p>文字由电脑字体渲染为 1bit 位图，设备只保存布局、日期、图标和倒计时。</p>
-			<div class="flex-container">
+			<div class="flex-container dashboard-row">
 				<div class="flex-group"><label>日程 1</label><input id="dash-schedule-0" value="面包"><input id="dash-schedule-time-0" type="datetime-local"></div>
 				<div class="flex-group"><label>日程 2</label><input id="dash-schedule-1" value="牛奶"><input id="dash-schedule-time-1" type="datetime-local"></div>
 			</div>
-			<div class="flex-container">
+			<div class="flex-container dashboard-row">
 				<div class="flex-group"><label>食品 1</label><select id="dash-food-type-0"><option value="1">饮品</option><option value="0">食品</option></select><input id="dash-food-0" value="牛奶"><input id="dash-food-date-0" type="date"></div>
 				<div class="flex-group"><label>食品 2</label><select id="dash-food-type-1"><option value="1">饮品</option><option value="0">食品</option></select><input id="dash-food-1" value="咖啡"><input id="dash-food-date-1" type="date"></div>
 				<div class="flex-group"><label>食品 3</label><select id="dash-food-type-2"><option value="0">食品</option><option value="1">饮品</option></select><input id="dash-food-2" value="巧克力"><input id="dash-food-date-2" type="date"></div>
 				<div class="flex-group"><label>食品 4</label><select id="dash-food-type-3"><option value="0">食品</option><option value="1">饮品</option></select><input id="dash-food-3" value="面包"><input id="dash-food-date-3" type="date"></div>
 			</div>
-			<div class="flex-container">
+			<div class="flex-container dashboard-actions">
 				<div class="flex-group"><label>字符字体</label><select id="dash-font"><option value="Microsoft YaHei">微软雅黑</option><option value="SimHei">黑体</option><option value="sans-serif">Sans-serif</option></select></div>
 				<div class="flex-group"><button id="senddashboardbutton" type="button" class="primary" onclick="sendDashboardTextBitmaps()">同步并发送字符位图</button></div>
 			</div>
