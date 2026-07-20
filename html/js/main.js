@@ -73,7 +73,11 @@ async function sendDashboardBitmap(tx, asset, text, width) {
   const height = 20;
   const bitmap = renderTextBitmap(text, width, height);
   const mtu = Math.max(20, Number(document.getElementById('mtusize').value) || 20);
-  const chunkSize = Math.max(1, mtu - 14);
+  // Some Windows BLE adapters report the negotiated ATT payload as 244 but
+  // still reject long writes on this characteristic. Keep dashboard chunks
+  // within the default 20-byte ATT payload (12-byte protocol header leaves
+  // six bytes for data, plus the CRC on the final packet).
+  const chunkSize = Math.min(6, Math.max(1, mtu - 14));
   const crc = crc16ccitt(bitmap);
   for (let offset = 0; offset < bitmap.length; offset += chunkSize) {
     const end = Math.min(offset + chunkSize, bitmap.length);
