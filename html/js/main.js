@@ -764,6 +764,24 @@ function checkDebugMode() {
   }
 }
 
+function setDashboardExampleDates() {
+  const pad = (value) => String(value).padStart(2, '0');
+  const localDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const localDateTime = (date) => `${localDate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const now = new Date();
+  const scheduleOffsets = [60, 180];
+  const foodOffsets = [2, 5, 8, 12];
+
+  scheduleOffsets.forEach((minutes, index) => {
+    const input = document.getElementById(`dash-schedule-time-${index}`);
+    if (input && !input.value) input.value = localDateTime(new Date(now.getTime() + minutes * 60000));
+  });
+  foodOffsets.forEach((days, index) => {
+    const input = document.getElementById(`dash-food-date-${index}`);
+    if (input && !input.value) input.value = localDate(new Date(now.getTime() + days * 86400000));
+  });
+}
+
 document.body.onload = () => {
   textDecoder = null;
   canvas = document.getElementById('canvas');
@@ -778,6 +796,7 @@ document.body.onload = () => {
   paintManager.initPaintTools();
   cropManager.initCropTools();
   initEventHandlers();
+  setDashboardExampleDates();
   updateButtonStatus();
   checkDebugMode();
 }
