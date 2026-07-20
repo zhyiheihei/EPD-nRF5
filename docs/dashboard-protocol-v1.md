@@ -1,289 +1,177 @@
-# EPD Dashboard BLE Protocol v1
+# EPD 日程看板 BLE 协议 v1
 
-Status: metadata transactions, time synchronization, and streamed bitmap assets are implemented by the dedicated
-UC8179 firmware.
+适用固件：nRF52811、7.5 英寸 800×480、UC8179 黑白红屏的专用构建（当前已验证 v1E）。
 
-## 1. Goals
+设备负责绘制日历、边框、日期、食品/饮品图标及剩余天数；上位机负责将日程标题和食品名称渲染成 1-bit 位图。设备不接收文本编码，因此 UTF-8、GBK 或中文字体都只属于上位机侧问题。
 
-This protocol updates the 800x480 dashboard without replacing the existing EPD protocol.
-
-- The device renders the calendar, borders, dates, countdowns, and food/drink icons.
-- The host renders arbitrary schedule titles and food names to monochrome 1bpp bitmaps.
-- At most 2 schedules and 4 food records are displayed.
-- A transaction is committed atomically: incomplete transfers are never refreshed.
-- Existing commands `0x00-0x30` and `0x90-0x99` retain their current meaning.
-
-The new commands use the existing service and characteristic:
+## 服务与基本约定
 
 ```text
 Service:        62750001-d828-918d-fb46-b6c11c675aec
 Characteristic: 62750002-d828-918d-fb46-b6c11c675aec
+Version:        62750003-d828-918d-fb46-b6c11c675aec（只读，当前为 0x1E）
 ```
 
-The characteristic continues to support Write, Write Without Response, and Notification.
+- 特征支持 Write、Write Without Response 和 Notification。
+- 多字节整数均为大端；时区为带符号 16 位“分钟”，中国为 `+480`（`01 E0`）。
+- 时间戳为 UTC Unix 秒数；设备会加上时区，保存为本地墙上时间。
+- 事务 ID 为非零 8 位数；一次事务中的所有 `BEGIN`、`BITMAP`、`COMMIT` 必须相同。
+- 位图每行按字节补齐，左侧像素为 bit7。上位机按“1=黑、0=白”生成即可；固件会按屏驱动需要做内部反相，`INVERT (0x04)` 标志在当前 v1E 中未使用。
+- CRC 为 CRC-16/CCITT-FALSE（多项式 `0x1021`、初值 `0xFFFF`、不反射、xor-out `0x0000`）。
 
-## 2. Compatibility
+## 命令与响应
 
-New command IDs occupy an unused range:
+| ID | 名称 | 方向 |
+|---:|---|---|
+| `40` | `DASH_CAPS` | 上位机 → 设备 |
+| `41` | `DASH_BEGIN` | 上位机 → 设备 |
+| `42` | `DASH_BITMAP` | 上位机 → 设备 |
+| `43` | `DASH_COMMIT` | 上位机 → 设备 |
+| `44` | `DASH_ABORT` | 上位机 → 设备 |
+| `45` | `DASH_SYNC_TIME` | 上位机 → 设备 |
+| `C0` | `DASH_RESPONSE` | 设备通知 → 上位机 |
 
-| ID | Name |
-|---:|---|
-| `0x40` | DASH_CAPS |
-| `0x41` | DASH_BEGIN |
-| `0x42` | DASH_BITMAP |
-| `0x43` | DASH_COMMIT |
-| `0x44` | DASH_ABORT |
-| `0x45` | DASH_SYNC_TIME |
-| `0xC0` | DASH_RESPONSE notification |
-
-Old firmware ignores these commands. New firmware keeps all legacy behavior unchanged. A host must send `DASH_CAPS` first and fall back to the legacy full-image protocol if it receives no valid response.
-
-## 3. Encoding conventions
-
-- Multi-byte integers are unsigned big-endian unless explicitly marked signed.
-- Unix timestamps are UTC seconds.
-- Timezone offset is a signed 16-bit number of minutes, for example China Standard Time is `+480` (`0x01E0`).
-- Bitmap scanlines are byte padded. The leftmost pixel is bit 7 of the first byte.
-- A set bit is black; an unset bit is transparent/white.
-- Bitmap CRC is CRC-16/CCITT-FALSE: polynomial `0x1021`, initial value `0xFFFF`, no reflection, xor-out `0x0000`.
-- Transaction ID is chosen by the host and must be non-zero. It may wrap from `255` to `1`.
-
-## 4. Response notification
-
-Every command error and every transaction boundary is reported through a binary notification:
+响应格式：
 
 ```text
-Offset  Size  Field
-0       1     0xC0
-1       1     protocol version (0x01)
-2       1     transaction ID; 0 for DASH_CAPS
-3       1     request command (0x40-0x44)
-4       1     status
-5       N     command-specific payload
+Offset  Size  含义
+0       1     C0
+1       1     协议版本（01）
+2       1     事务 ID；CAPS 固定为 00
+3       1     被响应的命令（40–45）
+4       1     状态码
+5       N     可选载荷（仅 CAPS 使用）
 ```
 
-Status values:
-
-| Value | Meaning |
+| 状态 | 含义 |
 |---:|---|
-| `00` | OK |
-| `01` | unsupported protocol version |
-| `02` | invalid packet length |
-| `03` | command invalid in current state |
-| `04` | transaction ID mismatch |
-| `05` | invalid schedule/food/asset slot |
-| `06` | invalid bitmap dimensions or offset |
-| `07` | bitmap CRC mismatch |
-| `08` | insufficient memory |
-| `09` | device/display busy |
-| `0A` | unsupported feature |
-| `0B` | transaction timeout |
+| `00` | 成功 |
+| `01` | 协议版本不支持 |
+| `02` | 包长度错误 |
+| `03` | 当前状态不允许 |
+| `04` | 事务 ID 不匹配 |
+| `05` | 条目或资源槽位错误 |
+| `06` | 位图尺寸、偏移或资源错误 |
+| `07` | CRC 错误 |
 
-## 5. Capability discovery (`0x40`)
+其余状态码为预留值，当前 v1E 不会在正常路径返回。
 
-Request:
+## 1. 能力查询 `40`
+
+请求必须恰好为：
 
 ```text
 40 01
 ```
 
-Response payload after the common response header:
+成功响应的 `C0` 载荷（从总包偏移 5 开始）为：
 
 ```text
-Offset  Size  Field
-5       1     application version
-6       1     highest dashboard protocol version
-7       1     maximum schedules (2)
-8       1     maximum foods (4)
-9       2     maximum bitmap bytes (1024)
-11      2     feature flags
-13      2     current ATT payload bytes
-15      2     display width
-17      2     display height
+0  1  固件版本
+1  1  最高协议版本（01）
+2  1  最大日程数（2）
+3  1  最大食品数（4）
+4  2  单个位图最大字节数（1024）
+6  2  功能位（当前为 003F）
+8  2  特征最大数据长度（当前为 244）
+10 2  屏幕宽度（800）
+12 2  屏幕高度（480）
 ```
 
-Feature flags:
+建议连接、启用通知后先发送此命令。固件不强制要求 CAPS，但上位机应据此确认兼容性。
+
+## 2. 开始事务 `41`
+
+`BEGIN` 传输日期、日程时间和食品到期日期，并准备基础界面；它本身不执行屏幕刷新。
 
 ```text
-bit 0: structured metadata
-bit 1: 1bpp bitmap assets
-bit 2: CRC-16 validation
-bit 3: transaction commit
-bit 4: local food/drink icons
-bit 5: explicit time synchronization
+Offset  Size  含义
+0       1     41
+1       1     01
+2       1     事务 ID（非零）
+3       1     标志，当前保留，发送 00
+4       4     当前 UTC 时间
+8       2     时区分钟数
+10      1     每周起始日：0=周日 … 6=周六
+11      1     日程数量：0–2
+12      1     食品数量：0–4
+13      N     日程记录，随后是食品记录
 ```
 
-## 6. Begin transaction (`0x41`)
+日程记录为 10 字节：`slot(1) flags(1) start_utc(4) end_utc(4)`；当前固件保存开始时间，`flags/end_utc` 为兼容保留字段。
 
-`DASH_BEGIN` transfers all structured metadata. It does not refresh the panel.
+食品记录为 6 字节：`slot(1) type(1) expiry_utc(4)`，其中 `type=0` 为食品、`type=1` 为饮品。
+
+总长度必须为：`13 + 日程数 × 10 + 食品数 × 6`。收到 `BEGIN OK` 后再发送位图。
+
+## 3. 字符位图 `42`
+
+资源槽位：日程标题为 `00`、`01`；食品名称为 `10`–`13`。
 
 ```text
-Offset  Size  Field
-0       1     0x41
-1       1     protocol version (0x01)
-2       1     transaction ID
-3       1     flags; reserved, send 0
-4       4     current UTC timestamp
-8       2     timezone offset in signed minutes
-10      1     week start (0=Sunday ... 6=Saturday)
-11      1     schedule count (0-2)
-12      1     food count (0-4)
-13      N     schedule records followed by food records
+Offset  Size  含义
+0       1     42
+1       1     01
+2       1     事务 ID
+3       1     资源槽位
+4       1     标志：01=首片，02=末片
+5       2     宽度（像素）
+7       1     高度（像素）
+8       2     位图总字节数
+10      2     本片偏移
+12      N     位图数据
+12+N    2     仅末片附带 CRC16
 ```
 
-Schedule record, 10 bytes:
+约束：
+
+- `总字节数 = ceil(宽度 / 8) × 高度`，且不得超过 1024。
+- 同一资源的片段必须从偏移 0 开始连续发送，不能乱序或重叠。
+- 推荐日程标题使用 `320×20`（800 字节）；食品名称使用 `152×20`（380 字节），与当前网页布局一致。
+- 每个资源末片完成 CRC 校验后通知 `42 OK`。在收到该响应前不要发送下一个资源。
+- 虽然 CAPS 报告特征上限为 244，部分 Windows BLE 栈会拒绝大写入。当前网页使用每片 6 字节数据的保守分片，优先保证兼容性。
+
+## 4. 提交 `43`
 
 ```text
-Offset  Size  Field
-0       1     slot (0-1)
-1       1     flags: bit0=all-day
-2       4     start UTC timestamp
-6       4     end UTC timestamp
+43 01 <事务ID> <标志>
 ```
 
-Food record, 6 bytes:
+标志：`01` 刷新屏幕，`02` 刷新后休眠驱动；正常值为 `03`。
+
+`COMMIT` 检查事务 ID，应用元数据并发送 `43 OK`，随后按标志执行刷新和休眠。注意：当前固件的成功通知在实际刷新开始前发出，因此上位机应等待屏幕刷新自然完成，不应把通知当作“墨水屏已稳定”的信号。
+
+## 5. 中止 `44`
 
 ```text
-Offset  Size  Field
-0       1     slot (0-3)
-1       1     type: 0=food, 1=drink
-2       4     expiry UTC timestamp
+44 01 <事务ID>
 ```
 
-Expected total request length:
+设备清除暂存的事务和当前接收位图，不刷新屏幕并回复 `44 OK`。
+
+当前 v1E **没有**实现“断线自动中止”或“30 秒无活动自动中止”；上位机在失败、断线或超时后应主动发送 `ABORT`（若仍可连接），再使用新的事务 ID 重试。
+
+## 6. 单独同步时间 `45`
 
 ```text
-13 + schedule_count * 10 + food_count * 6
+45 01 <事务ID，可为00> <UTC四字节> <时区两字节>
 ```
 
-On success the device prepares the dashboard base layer and responds `OK`. The host must wait for this response before sending bitmap data.
+总长度固定为 9 字节。设备立即校准本地时间并回复 `45 OK`；不刷新屏幕。`BEGIN` 也携带同样的时间信息，正常看板同步通常只需 `BEGIN`。
 
-## 7. Bitmap assets (`0x42`)
+## 推荐上位机流程
 
-Asset IDs:
+1. 连接并启用通知，发送旧 `INIT (01)` 以获取连接 MTU/配置通知。
+2. `CAPS`，确认协议版本、800×480 和功能位。
+3. 按时间排序，仅选两条日程和四条最近到期食品。
+4. 发送 `BEGIN`，等待 `41 OK`。
+5. 在上位机用系统字体渲染中文标题为 1-bit 位图；设备不需要中文字体。
+6. 依次发送六个资源，每个资源等待 `42 OK`。
+7. 发送 `COMMIT` 值 `03`。
 
-| ID | Contents |
-|---:|---|
-| `00`, `01` | schedule title 0/1 |
-| `10`-`13` | food name 0-3 |
+## 已知实现边界
 
-Packet header:
-
-```text
-Offset  Size  Field
-0       1     0x42
-1       1     protocol version (0x01)
-2       1     transaction ID
-3       1     asset ID
-4       1     flags
-5       2     bitmap width in pixels
-7       1     bitmap height in pixels
-8       2     total bitmap byte length
-10      2     chunk offset
-12      N     chunk bytes
-12+N    2     CRC-16, present only when END is set
-```
-
-Flags:
-
-```text
-bit 0 (0x01): BEGIN; offset must be zero and dimensions are accepted
-bit 1 (0x02): END; CRC follows the chunk data
-bit 2 (0x04): INVERT bitmap bits
-```
-
-Constraints:
-
-- `total_length == ceil(width / 8) * height`
-- total length must not exceed 1024 bytes
-- chunks must arrive in increasing, non-overlapping offset order
-- schedule title recommendation: maximum `320x20` (800 bytes)
-- food name recommendation: maximum `192x20` (480 bytes)
-- pixels outside the asset's assigned rectangle are never writable through this command
-
-The dedicated nRF52811 build uses one reusable 1024-byte buffer. A completed asset is CRC-checked and immediately
-written to UC8179 display RAM before the next asset is accepted. Character bitmaps are volatile: after a later full
-calendar redraw, the host must resend the dashboard transaction.
-
-Intermediate chunks may use Write Without Response. The BEGIN packet, every eighth packet, and the END packet should use Write With Response. The device sends a dashboard notification for END success or failure.
-
-## 8. Commit (`0x43`)
-
-```text
-Offset  Size  Field
-0       1     0x43
-1       1     protocol version (0x01)
-2       1     transaction ID
-3       1     flags
-```
-
-Flags:
-
-```text
-bit 0 (0x01): refresh display
-bit 1 (0x02): put display driver to sleep after refresh
-```
-
-Normal value is `0x03`. The device validates transaction state, writes all completed assets, refreshes once, sleeps the EPD, clears transaction RAM, and responds when the operation has completed.
-
-## 9. Abort (`0x44`)
-
-```text
-44 01 <transaction_id>
-```
-
-The device discards transaction RAM without refreshing. Disconnect and a 30-second inactivity timeout have the same effect.
-
-## 10. Synchronize time (`0x45`)
-
-Time may be synchronized independently of a dashboard refresh:
-
-```text
-Offset  Size  Field
-0       1     0x45
-1       1     protocol version (0x01)
-2       1     transaction ID for response matching; zero is allowed
-3       4     current UTC timestamp
-7       2     timezone offset in signed minutes
-```
-
-The device converts UTC to its local wall-clock timestamp, resets its one-second timer, and replies with
-`DASH_RESPONSE`. `DASH_BEGIN` carries the same UTC/timezone pair and applies it atomically on `DASH_COMMIT`, so a host
-normally needs only one of these mechanisms.
-
-## 11. Example transaction
-
-```text
-# Discover v1 support
-40 01
-
-# Begin tx=0x2A, UTC=0x67800000, timezone=+480,
-# week starts Monday, 2 schedules, 4 foods
-41 01 2A 00 67 80 00 00 01 E0 01 02 04 ...records...
-
-# Schedule title 0, single 320x20 packet sequence
-42 01 2A 00 01 01 40 14 03 20 00 00 ...first chunk...
-42 01 2A 00 02 01 40 14 03 20 00 F0 ...last chunk... CRC16
-
-# Other title/name assets follow
-
-# Refresh and sleep
-43 01 2A 03
-```
-
-## 12. Host behavior
-
-1. Connect and enable notifications.
-2. Run legacy `INIT (0x01)` so the device reports MTU and current configuration.
-3. Send `DASH_CAPS` and verify protocol version, dimensions, and feature flags.
-4. Sort CalDAV events and send only the next two.
-5. Sort food records by expiry and send only the next four.
-6. Send `DASH_BEGIN` and wait for `OK`.
-7. Render titles/names using a platform font to 1bpp assets.
-8. Send each asset in MTU-sized chunks and verify the END response.
-9. Send `DASH_COMMIT` with flags `0x03`.
-10. On error or disconnect, abort and restart with a new transaction ID.
-
-## 13. Security note
-
-The existing characteristic has open read/write permissions. Protocol v1 adds integrity checking, not authentication or encryption. Do not send CalDAV credentials to the display. The host should send only already-filtered event metadata and rendered title bitmaps.
+- 位图和看板数据仅在 RAM 中；设备重启或之后进行完整日历重绘，需由上位机重新同步。
+- `BEGIN` 已会把暂存元数据复制到运行时看板状态，因此“未 COMMIT 就完全不改变运行时状态”不是当前固件保证；但它不会在 `COMMIT` 前刷新屏幕。
+- 专用 v1E 构建已移除旧的全屏图片、时钟和可变硬件配置路径；上位机不要依赖原项目的这些旧命令。
+- 特征为开放读写，协议提供 CRC 但没有认证或加密。不要向设备传输 CalDAV 密码或令牌。
