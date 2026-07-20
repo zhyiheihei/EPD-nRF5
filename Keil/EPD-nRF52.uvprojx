@@ -10,7 +10,7 @@
       <TargetName>nRF52811_xxAA</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
-      <pCCUsed>5060960::V5.06 update 7 (build 960)::.\ARMCC</pCCUsed>
+      <pCCUsed>5060422::V5.06 update 4 (build 422)::ARMCC</pCCUsed>
       <uAC6>0</uAC6>
       <TargetOption>
         <TargetCommonOption>
@@ -133,12 +133,12 @@
             <UseExternalTool>0</UseExternalTool>
             <RunIndependent>0</RunIndependent>
             <UpdateFlashBeforeDebugging>1</UpdateFlashBeforeDebugging>
-            <Capability>1</Capability>
+            <Capability>0</Capability>
             <DriverSelection>4096</DriverSelection>
           </Flash1>
           <bUseTDR>1</bUseTDR>
           <Flash2>BIN\UL2CM3.DLL</Flash2>
-          <Flash3>"" ()</Flash3>
+          <Flash3></Flash3>
           <Flash4></Flash4>
           <pFcarmOut></pFcarmOut>
           <pFcarmGrp></pFcarmGrp>
@@ -400,11 +400,6 @@
           <GroupName>EPD</GroupName>
           <Files>
             <File>
-              <FileName>EPD_config.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\EPD\EPD_config.c</FilePath>
-            </File>
-            <File>
               <FileName>EPD_driver.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\EPD\EPD_driver.c</FilePath>
@@ -590,11 +585,6 @@
               <FilePath>..\SDK\17.1.0_ddde560\components\libraries\timer\drv_rtc.c</FilePath>
             </File>
             <File>
-              <FileName>fds.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\SDK\17.1.0_ddde560\components\libraries\fds\fds.c</FilePath>
-            </File>
-            <File>
               <FileName>nrf_assert.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\SDK\17.1.0_ddde560\components\libraries\util\nrf_assert.c</FilePath>
@@ -633,16 +623,6 @@
               <FileName>nrf_fprintf_format.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\SDK\17.1.0_ddde560\external\fprintf\nrf_fprintf_format.c</FilePath>
-            </File>
-            <File>
-              <FileName>nrf_fstorage.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\SDK\17.1.0_ddde560\components\libraries\fstorage\nrf_fstorage.c</FilePath>
-            </File>
-            <File>
-              <FileName>nrf_fstorage_sd.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\SDK\17.1.0_ddde560\components\libraries\fstorage\nrf_fstorage_sd.c</FilePath>
             </File>
             <File>
               <FileName>nrf_memobj.c</FileName>
@@ -773,7 +753,7 @@
         <TargetCommonOption>
           <Device>nRF52811_xxAA</Device>
           <Vendor>Nordic Semiconductor</Vendor>
-          <PackID>NordicSemiconductor.nRF_DeviceFamilyPack.8.40.3</PackID>
+          <PackID>NordicSemiconductor.nRF_DeviceFamilyPack.8.44.1</PackID>
           <PackURL>http://developer.nordicsemi.com/nRF5_SDK/pieces/nRF_DeviceFamilyPack/</PackURL>
           <Cpu>IRAM(0x20000000,0x00006000) IRAM2(0x00800000,0x00006000) IROM(0x00000000,0x00030000) CPUTYPE("Cortex-M4") DSP CLOCK(12000000) ELITTLE</Cpu>
           <FlashUtilSpec></FlashUtilSpec>
@@ -1033,8 +1013,8 @@
               </OCR_RVCT3>
               <OCR_RVCT4>
                 <Type>1</Type>
-                <StartAddress>0x19000</StartAddress>
-                <Size>0x17000</Size>
+                <StartAddress>0x0</StartAddress>
+                <Size>0x30000</Size>
               </OCR_RVCT4>
               <OCR_RVCT5>
                 <Type>1</Type>
@@ -1058,8 +1038,8 @@
               </OCR_RVCT8>
               <OCR_RVCT9>
                 <Type>0</Type>
-                <StartAddress>0x200022c8</StartAddress>
-                <Size>0x3d38</Size>
+                <StartAddress>0x20000000</StartAddress>
+                <Size>0x6000</Size>
               </OCR_RVCT9>
               <OCR_RVCT10>
                 <Type>0</Type>
@@ -1156,11 +1136,6 @@
         <Group>
           <GroupName>EPD</GroupName>
           <Files>
-            <File>
-              <FileName>EPD_config.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\EPD\EPD_config.c</FilePath>
-            </File>
             <File>
               <FileName>EPD_driver.c</FileName>
               <FileType>1</FileType>
@@ -1347,11 +1322,6 @@
               <FilePath>..\SDK\17.1.0_ddde560\components\libraries\timer\drv_rtc.c</FilePath>
             </File>
             <File>
-              <FileName>fds.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\SDK\17.1.0_ddde560\components\libraries\fds\fds.c</FilePath>
-            </File>
-            <File>
               <FileName>nrf_assert.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\SDK\17.1.0_ddde560\components\libraries\util\nrf_assert.c</FilePath>
@@ -1390,16 +1360,6 @@
               <FileName>nrf_fprintf_format.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\SDK\17.1.0_ddde560\external\fprintf\nrf_fprintf_format.c</FilePath>
-            </File>
-            <File>
-              <FileName>nrf_fstorage.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\SDK\17.1.0_ddde560\components\libraries\fstorage\nrf_fstorage.c</FilePath>
-            </File>
-            <File>
-              <FileName>nrf_fstorage_sd.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\SDK\17.1.0_ddde560\components\libraries\fstorage\nrf_fstorage_sd.c</FilePath>
             </File>
             <File>
               <FileName>nrf_memobj.c</FileName>

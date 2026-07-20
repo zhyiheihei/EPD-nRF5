@@ -9,7 +9,7 @@ typedef enum {
     MODE_CLOCK = 2,
 } display_mode_t;
 
-#define GUI_MAX_SCHEDULES 6
+#define GUI_MAX_SCHEDULES 2
 #define GUI_MAX_FOODS 4
 
 typedef enum {

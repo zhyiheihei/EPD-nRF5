@@ -17,11 +17,131 @@ const EpdCmd = {
 
   WRITE_IMG: 0x30, // v1.6
 
+  DASH_CAPS: 0x40,
+  DASH_BEGIN: 0x41,
+  DASH_BITMAP: 0x42,
+  DASH_COMMIT: 0x43,
+  DASH_SYNC_TIME: 0x45,
+
   SET_CONFIG: 0x90,
   SYS_RESET: 0x91,
   SYS_SLEEP: 0x92,
   CFG_ERASE: 0x99,
 };
+
+function pushBE16(out, value) {
+  out.push((value >>> 8) & 0xff, value & 0xff);
+}
+
+function pushBE32(out, value) {
+  value >>>= 0;
+  out.push((value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff);
+}
+
+function crc16ccitt(data) {
+  let crc = 0xffff;
+  for (const value of data) {
+    crc ^= value << 8;
+    for (let bit = 0; bit < 8; bit++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
+}
+
+function renderTextBitmap(text, width, height) {
+  const surface = document.createElement('canvas');
+  surface.width = width;
+  surface.height = height;
+  const context = surface.getContext('2d', { willReadFrequently: true });
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = '#000';
+  context.font = `bold 18px "${document.getElementById('dash-font').value}"`;
+  context.textBaseline = 'middle';
+  context.fillText(text, 1, Math.floor(height / 2), width - 2);
+  const rgba = context.getImageData(0, 0, width, height).data;
+  const rowBytes = Math.ceil(width / 8);
+  const bitmap = new Uint8Array(rowBytes * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (rgba[(y * width + x) * 4] < 128) bitmap[y * rowBytes + (x >> 3)] |= 0x80 >> (x & 7);
+    }
+  }
+  return bitmap;
+}
+
+async function sendDashboardBitmap(tx, asset, text, width) {
+  const height = 20;
+  const bitmap = renderTextBitmap(text, width, height);
+  const mtu = Math.max(20, Number(document.getElementById('mtusize').value) || 20);
+  const chunkSize = Math.max(1, mtu - 14);
+  const crc = crc16ccitt(bitmap);
+  for (let offset = 0; offset < bitmap.length; offset += chunkSize) {
+    const end = Math.min(offset + chunkSize, bitmap.length);
+    const flags = (offset === 0 ? 1 : 0) | (end === bitmap.length ? 2 : 0);
+    const header = [1, tx, asset, flags];
+    pushBE16(header, width);
+    header.push(height);
+    pushBE16(header, bitmap.length);
+    pushBE16(header, offset);
+    const packet = [...header, ...bitmap.slice(offset, end)];
+    if (flags & 2) pushBE16(packet, crc);
+    if (!await write(EpdCmd.DASH_BITMAP, Uint8Array.from(packet), true)) throw new Error('字符位图发送失败');
+  }
+}
+
+async function sendDashboardTextBitmaps() {
+  const button = document.getElementById('senddashboardbutton');
+  const status = document.getElementById('dashboard-status');
+  button.disabled = true;
+  try {
+    const tx = ((Date.now() >>> 0) & 0xff) || 1;
+    const now = Math.floor(Date.now() / 1000);
+    const timezone = -new Date().getTimezoneOffset();
+    const schedules = [];
+    const foods = [];
+    for (let i = 0; i < 2; i++) {
+      const title = document.getElementById(`dash-schedule-${i}`).value.trim();
+      const input = document.getElementById(`dash-schedule-time-${i}`).value;
+      if (title && input) schedules.push({ slot: i, title, start: Math.floor(new Date(input).getTime() / 1000) });
+    }
+    for (let i = 0; i < 4; i++) {
+      const name = document.getElementById(`dash-food-${i}`).value.trim();
+      const input = document.getElementById(`dash-food-date-${i}`).value;
+      if (name && input) foods.push({ slot: i, name, type: Number(document.getElementById(`dash-food-type-${i}`).value), expiry: Math.floor(new Date(`${input}T23:59:59`).getTime() / 1000) });
+    }
+    const begin = [1, tx, 0];
+    pushBE32(begin, now);
+    pushBE16(begin, timezone & 0xffff);
+    begin.push(1, schedules.length, foods.length);
+    for (const item of schedules) {
+      begin.push(item.slot, 0);
+      pushBE32(begin, item.start);
+      pushBE32(begin, item.start + 3600);
+    }
+    for (const item of foods) {
+      begin.push(item.slot, item.type);
+      pushBE32(begin, item.expiry);
+    }
+    status.textContent = '发送元数据…';
+    if (!await write(EpdCmd.DASH_BEGIN, Uint8Array.from(begin), true)) throw new Error('BEGIN 失败');
+    for (const item of schedules) {
+      status.textContent = `发送日程 ${item.slot + 1} 字符…`;
+      await sendDashboardBitmap(tx, item.slot, item.title, 320);
+    }
+    for (const item of foods) {
+      status.textContent = `发送食品 ${item.slot + 1} 字符…`;
+      await sendDashboardBitmap(tx, 0x10 + item.slot, item.name, 152);
+    }
+    status.textContent = '提交并刷新…';
+    if (!await write(EpdCmd.DASH_COMMIT, Uint8Array.from([1, tx, 3]), true)) throw new Error('COMMIT 失败');
+    status.textContent = '发送完成';
+  } catch (error) {
+    status.textContent = error.message;
+    console.error(error);
+  } finally {
+    button.disabled = false;
+  }
+}
 
 const canvasSizes = [
   { name: '1.54_152_152', width: 152, height: 152 },
@@ -315,6 +435,8 @@ function updateButtonStatus(forceDisabled = false) {
   document.getElementById("clearscreenbutton").disabled = status;
   document.getElementById("sendimgbutton").disabled = status;
   document.getElementById("setDriverbutton").disabled = status;
+  const dashboardButton = document.getElementById("senddashboardbutton");
+  if (dashboardButton) dashboardButton.disabled = status;
 }
 
 function disconnect() {
@@ -370,6 +492,13 @@ function handleNotify(value, idx) {
     if (data.length > 10) epdpins.value += bytes2hex(data.slice(10, 11));
     epddriver.value = bytes2hex(data.slice(7, 8));
     updateDitcherOptions();
+  } else if (data[0] === 0xc0) {
+    const statusNames = ['OK', 'BAD_VERSION', 'BAD_LENGTH', 'BAD_STATE', 'BAD_TRANSACTION', 'BAD_SLOT',
+      'BAD_BITMAP', 'BAD_CRC', 'NO_MEMORY', 'BUSY', 'UNSUPPORTED', 'TIMEOUT'];
+    const result = statusNames[data[4]] || `STATUS_${data[4]}`;
+    addLog(`协议响应 cmd=0x${data[3].toString(16)} tx=${data[2]} ${result} ${bytes2hex(data)}`, '⇓');
+    const dashboardStatus = document.getElementById('dashboard-status');
+    if (dashboardStatus) dashboardStatus.textContent = result;
   } else {
     if (textDecoder == null) textDecoder = new TextDecoder();
     const msg = textDecoder.decode(data);

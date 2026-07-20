@@ -11,7 +11,6 @@ static void UC81xx_PowerOn(epd_model_t* epd) {
 
 static void UC81xx_PowerOff(epd_model_t* epd) {
     EPD_WriteCmd(UC81xx_POF);
-    if (epd->color == COLOR_BWRY) EPD_WriteByte(0x00);
     UC81xx_WaitBusy(200);
 }
 
@@ -23,21 +22,11 @@ int8_t UC81xx_ReadTemp(epd_model_t* epd) {
 }
 
 static void UC81xx_SetWindow(epd_model_t* epd, uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-    switch (epd->ic) {
-        case DRV_IC_JD79668:
-        case DRV_IC_JD79665:
-            EPD_Write(0x83,  // partial window
-                      x / 256, x % 256, (x + w - 1) / 256, (x + w - 1) % 256, y / 256, y % 256, (y + h - 1) / 256,
-                      (y + h - 1) % 256, 0x01);
-            break;
-        default: {
-            uint16_t xe = (x + w - 1) | 0x0007;  // byte boundary inclusive (last byte)
-            uint16_t ye = y + h - 1;
-            x &= 0xFFF8;           // byte boundary
-            EPD_Write(UC81xx_PTL,  // partial window
-                      x / 256, x % 256, xe / 256, xe % 256, y / 256, y % 256, ye / 256, ye % 256, 0x00);
-        } break;
-    }
+    uint16_t xe = (x + w - 1) | 0x0007;
+    uint16_t ye = y + h - 1;
+    x &= 0xFFF8;
+    EPD_Write(UC81xx_PTL, x / 256, x % 256, xe / 256, xe % 256, y / 256, y % 256, ye / 256, ye % 256,
+              0x00);
 }
 
 void UC81xx_Refresh(epd_model_t* epd) {
@@ -46,7 +35,6 @@ void UC81xx_Refresh(epd_model_t* epd) {
     UC81xx_SetWindow(epd, 0, 0, epd->width, epd->height);
 
     EPD_WriteCmd(UC81xx_DRF);
-    if (epd->color == COLOR_BWRY) EPD_WriteByte(0x00);
     delay(100);
     UC81xx_WaitBusy(UINT16_MAX);
 
@@ -55,89 +43,20 @@ void UC81xx_Refresh(epd_model_t* epd) {
 
 void UC81xx_Init(epd_model_t* epd) {
     EPD_Reset(true, 50);
-    switch (epd->ic) {
-        case DRV_IC_UC8159:
-            EPD_Write(UC81xx_PWR, 0x37, 0x00);
-            EPD_Write(UC81xx_PSR, 0xCF, 0x08);
-            EPD_Write(UC81xx_PLL, 0x3A);
-            EPD_Write(UC81xx_VDCS, 0x28);
-            EPD_Write(UC81xx_BTST, 0xc7, 0xcc, 0x15);
-            EPD_Write(UC81xx_CDI, 0x77);
-            EPD_Write(UC81xx_TCON, 0x22);
-            EPD_Write(0x65, 0x00);  // FLASH CONTROL
-            EPD_Write(0xe5, 0x03);  // FLASH MODE
-            EPD_Write(UC81xx_TRES, epd->width >> 8, epd->width & 0xff, epd->height >> 8, epd->height & 0xff);
-            break;
-        case DRV_IC_JD79668:
-            EPD_Write(0x4D, 0x78);
-            EPD_Write(UC81xx_PSR, 0x0F, 0x29);
-            EPD_Write(UC81xx_BTST, 0x0D, 0x12, 0x24, 0x25, 0x12, 0x29, 0x10);
-            EPD_Write(UC81xx_PLL, 0x08);
-            EPD_Write(UC81xx_CDI, 0x37);
-            EPD_Write(UC81xx_TRES, epd->width / 256, epd->width % 256, epd->height / 256, epd->height % 256);
-            EPD_Write(0xAE, 0xCF);
-            EPD_Write(0xB0, 0x13);
-            EPD_Write(0xBD, 0x07);
-            EPD_Write(0xBE, 0xFE);
-            EPD_Write(0xE9, 0x01);
-            break;
-        case DRV_IC_JD79665:
-            EPD_Write(0x4D, 0x78);
-            EPD_Write(UC81xx_PSR, 0x2F, 0x29);
-            EPD_Write(UC81xx_BTST, 0x0F, 0x8B, 0x93, 0xA1);
-            EPD_Write(UC81xx_TSE, 0x00);
-            EPD_Write(UC81xx_CDI, 0x37);
-            EPD_Write(UC81xx_TCON, 0x02, 0x02);
-            EPD_Write(UC81xx_TRES, epd->width / 256, epd->width % 256, epd->height / 256, epd->height % 256);
-            EPD_Write(0x62, 0x98, 0x98, 0x98, 0x75, 0xCA, 0xB2, 0x98, 0x7E);
-            if (epd->id == JD79665_750_BWRY)
-                EPD_Write(UC81xx_GSST, 0x00, 0x00, 0x00, 0x00);
-            else
-                EPD_Write(UC81xx_GSST, 0x00, 0x10, 0x00, 0x00);
-            EPD_Write(0xE7, 0x1C);
-            EPD_Write(UC81xx_PWS, 0x00);
-            EPD_Write(0xE9, 0x01);
-            EPD_Write(UC81xx_PLL, 0x08);
-            break;
-        default:
-            EPD_Write(UC81xx_PSR, epd->color == COLOR_BWR ? 0x0F : 0x1F);
-            EPD_Write(UC81xx_CDI, epd->color == COLOR_BWR ? 0x77 : 0x97);
-            break;
-    }
+    EPD_Write(UC81xx_PSR, 0x0F);
+    EPD_Write(UC81xx_CDI, 0x77);
     UC81xx_PowerOn(epd);
     UC81xx_SetWindow(epd, 0, 0, epd->width, epd->height);
 }
 
+#if 0  // Not used by the dedicated dashboard protocol.
 void UC81xx_Clear(epd_model_t* epd, bool refresh) {
     uint32_t wb = (epd->width + 7) / 8;
-    switch (epd->ic) {
-        case DRV_IC_UC8159:
-            EPD_WriteCmd(UC81xx_DTM1);
-            for (uint32_t j = 0; j < epd->height; j++) {
-                for (uint32_t i = 0; i < wb; i++) {
-                    for (uint8_t k = 0; k < 4; k++) {
-                        EPD_WriteByte(0x33);
-                    }
-                }
-            }
-            break;
-        case DRV_IC_JD79668:
-        case DRV_IC_JD79665:
-            wb = (epd->width + 3) / 4;  // 2bpp
-            EPD_WriteCmd(UC81xx_DTM1);
-            for (uint16_t i = 0; i < epd->height; i++) {
-                for (uint16_t j = 0; j < wb; j++) {
-                    EPD_WriteByte(0x55);
-                }
-            }
-            break;
-        default:
-            EPD_FillRAM(UC81xx_DTM1, 0xFF, wb * epd->height);
-            EPD_FillRAM(UC81xx_DTM2, 0xFF, wb * epd->height);
-            break;
-    }
+    EPD_FillRAM(UC81xx_DTM1, 0xFF, wb * epd->height);
+    EPD_FillRAM(UC81xx_DTM2, 0xFF, wb * epd->height);
     if (refresh) UC81xx_Refresh(epd);
 }
+#endif
 
 void UC8176_WriteImage(epd_model_t* epd, uint8_t* black, uint8_t* color, uint16_t x, uint16_t y, uint16_t w,
                        uint16_t h) {
@@ -166,6 +85,7 @@ void UC8176_WriteImage(epd_model_t* epd, uint8_t* black, uint8_t* color, uint16_
     EPD_WriteCmd(UC81xx_PTOUT);  // partial out
 }
 
+#if 0  // Other controller families are excluded from the dedicated UC8179 build.
 static void UC8159_SendPixel(uint8_t black_data, uint8_t color_data) {
     uint8_t data;
     for (uint8_t j = 0; j < 8; j++) {
@@ -230,45 +150,24 @@ void JD79668_WriteImage(epd_model_t* epd, uint8_t* black, uint8_t* color, uint16
         }
     }
 }
+#endif
 
 void UC81xx_WriteImage(epd_model_t* epd, uint8_t* black, uint8_t* color, uint16_t x, uint16_t y, uint16_t w,
                        uint16_t h) {
-    switch (epd->ic) {
-        case DRV_IC_UC8159:
-            UC8159_WriteImage(epd, black, color, x, y, w, h);
-            break;
-        case DRV_IC_JD79668:
-        case DRV_IC_JD79665:
-            JD79668_WriteImage(epd, black, color, x, y, w, h);
-            break;
-        default:
-            UC8176_WriteImage(epd, black, color, x, y, w, h);
-            break;
-    }
+    UC8176_WriteImage(epd, black, color, x, y, w, h);
 }
 
+#if 0  // Legacy full-screen RAM streaming is excluded.
 void UC81xx_WriteRam(epd_model_t* epd, uint8_t cfg, uint8_t* data, uint8_t len) {
     bool begin = (cfg >> 4) == 0x00;
     bool black = (cfg & 0x0F) == 0x0F;
     if (begin && black) UC81xx_SetWindow(epd, 0, 0, epd->width, epd->height);
-    switch (epd->ic) {
-        case DRV_IC_UC8159:
-        case DRV_IC_JD79665:
-        case DRV_IC_JD79668:
-            if (begin) EPD_WriteCmd(UC81xx_DTM1);
-            EPD_WriteData(data, len);
-            break;
-        default:
-            if (begin) {
-                if (epd->color == COLOR_BWR)
-                    EPD_WriteCmd(black ? UC81xx_DTM1 : UC81xx_DTM2);
-                else
-                    EPD_WriteCmd(UC81xx_DTM2);
-            }
-            EPD_WriteData(data, len);
-            break;
+    if (begin) {
+        EPD_WriteCmd(black ? UC81xx_DTM1 : UC81xx_DTM2);
     }
+    EPD_WriteData(data, len);
 }
+#endif
 
 void UC81xx_Sleep(epd_model_t* epd) {
     UC81xx_PowerOff(epd);
@@ -279,9 +178,9 @@ void UC81xx_Sleep(epd_model_t* epd) {
 // Declare driver and models
 static const epd_driver_t epd_drv_uc81xx = {
     .init = UC81xx_Init,
-    .clear = UC81xx_Clear,
+    .clear = NULL,
     .write_image = UC81xx_WriteImage,
-    .write_ram = UC81xx_WriteRam,
+    .write_ram = NULL,
     .refresh = UC81xx_Refresh,
     .sleep = UC81xx_Sleep,
     .read_temp = UC81xx_ReadTemp,

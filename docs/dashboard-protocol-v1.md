@@ -1,6 +1,7 @@
 # EPD Dashboard BLE Protocol v1
 
-Status: protocol design; firmware handlers are not implemented yet.
+Status: metadata transactions, time synchronization, and streamed bitmap assets are implemented by the dedicated
+UC8179 firmware.
 
 ## 1. Goals
 
@@ -32,6 +33,7 @@ New command IDs occupy an unused range:
 | `0x42` | DASH_BITMAP |
 | `0x43` | DASH_COMMIT |
 | `0x44` | DASH_ABORT |
+| `0x45` | DASH_SYNC_TIME |
 | `0xC0` | DASH_RESPONSE notification |
 
 Old firmware ignores these commands. New firmware keeps all legacy behavior unchanged. A host must send `DASH_CAPS` first and fall back to the legacy full-image protocol if it receives no valid response.
@@ -108,6 +110,7 @@ bit 1: 1bpp bitmap assets
 bit 2: CRC-16 validation
 bit 3: transaction commit
 bit 4: local food/drink icons
+bit 5: explicit time synchronization
 ```
 
 ## 6. Begin transaction (`0x41`)
@@ -198,6 +201,10 @@ Constraints:
 - food name recommendation: maximum `192x20` (480 bytes)
 - pixels outside the asset's assigned rectangle are never writable through this command
 
+The dedicated nRF52811 build uses one reusable 1024-byte buffer. A completed asset is CRC-checked and immediately
+written to UC8179 display RAM before the next asset is accepted. Character bitmaps are volatile: after a later full
+calendar redraw, the host must resend the dashboard transaction.
+
 Intermediate chunks may use Write Without Response. The BEGIN packet, every eighth packet, and the END packet should use Write With Response. The device sends a dashboard notification for END success or failure.
 
 ## 8. Commit (`0x43`)
@@ -227,7 +234,24 @@ Normal value is `0x03`. The device validates transaction state, writes all compl
 
 The device discards transaction RAM without refreshing. Disconnect and a 30-second inactivity timeout have the same effect.
 
-## 10. Example transaction
+## 10. Synchronize time (`0x45`)
+
+Time may be synchronized independently of a dashboard refresh:
+
+```text
+Offset  Size  Field
+0       1     0x45
+1       1     protocol version (0x01)
+2       1     transaction ID for response matching; zero is allowed
+3       4     current UTC timestamp
+7       2     timezone offset in signed minutes
+```
+
+The device converts UTC to its local wall-clock timestamp, resets its one-second timer, and replies with
+`DASH_RESPONSE`. `DASH_BEGIN` carries the same UTC/timezone pair and applies it atomically on `DASH_COMMIT`, so a host
+normally needs only one of these mechanisms.
+
+## 11. Example transaction
 
 ```text
 # Discover v1 support
@@ -247,7 +271,7 @@ The device discards transaction RAM without refreshing. Disconnect and a 30-seco
 43 01 2A 03
 ```
 
-## 11. Host behavior
+## 12. Host behavior
 
 1. Connect and enable notifications.
 2. Run legacy `INIT (0x01)` so the device reports MTU and current configuration.
@@ -260,6 +284,6 @@ The device discards transaction RAM without refreshing. Disconnect and a 30-seco
 9. Send `DASH_COMMIT` with flags `0x03`.
 10. On error or disconnect, abort and restart with a new transaction ID.
 
-## 12. Security note
+## 13. Security note
 
 The existing characteristic has open read/write permissions. Protocol v1 adds integrity checking, not authentication or encryption. Do not send CalDAV credentials to the display. The host should send only already-filtered event metadata and rendered title bitmaps.

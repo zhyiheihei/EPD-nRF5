@@ -449,6 +449,7 @@ static void DrawDashboard(Adafruit_GFX* gfx, tm_t* tm, struct Lunar_Date* Lunar,
     DrawFoodPanel(gfx, panel_x, 190, panel_width, data->height - 200, data);
 }
 
+#if 0  // Clock mode is not part of the dedicated dashboard firmware.
 // clang-format off
 /* Routine to Draw Large 7-Segment formated number
    Contributed by William Zaggle.
@@ -558,6 +559,7 @@ static void DrawClock(Adafruit_GFX* gfx, tm_t* tm, struct Lunar_Date* Lunar, gui
         GFX_printf(gfx, buf);
     }
 }
+#endif
 
 void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data) {
     if (data->week_start > 6) data->week_start = 0;
@@ -584,14 +586,12 @@ void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data) {
         LUNAR_SolarToLunar(&Lunar, tm.tm_year + YEAR0, tm.tm_mon + 1, tm.tm_mday);
 
         switch (data->mode) {
+            case MODE_CLOCK:  // Legacy command compatibility: show the dashboard.
             case MODE_CALENDAR:
                 if (data->width >= 700)
                     DrawDashboard(&gfx, &tm, &Lunar, data);
                 else
                     DrawCalendar(&gfx, &tm, &Lunar, data);
-                break;
-            case MODE_CLOCK:
-                DrawClock(&gfx, &tm, &Lunar, data);
                 break;
             default:
                 break;

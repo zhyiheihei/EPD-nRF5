@@ -294,24 +294,10 @@ uint16_t EPD_ReadVoltage(void) {
 }
 
 // EPD models
-extern epd_model_t epd_uc8176_420_bw;
-extern epd_model_t epd_uc8176_420_bwr;
-extern epd_model_t epd_uc8159_750_bw;
-extern epd_model_t epd_uc8159_750_bwr;
-extern epd_model_t epd_uc8179_750_bw;
 extern epd_model_t epd_uc8179_750_bwr;
-extern epd_model_t epd_ssd1619_420_bwr;
-extern epd_model_t epd_ssd1619_420_bw;
-extern epd_model_t epd_ssd1677_750_bwr;
-extern epd_model_t epd_ssd1677_750_bw;
-extern epd_model_t epd_jd79668_420_bwry;
-extern epd_model_t epd_jd79665_750_bwry;
-extern epd_model_t epd_jd79665_583_bwry;
 
 static epd_model_t* epd_models[] = {
-    &epd_uc8176_420_bw,    &epd_uc8176_420_bwr,   &epd_uc8159_750_bw,    &epd_uc8159_750_bwr,  &epd_uc8179_750_bw,
-    &epd_uc8179_750_bwr,   &epd_ssd1619_420_bwr,  &epd_ssd1619_420_bw,   &epd_ssd1677_750_bwr, &epd_ssd1677_750_bw,
-    &epd_jd79668_420_bwry, &epd_jd79665_750_bwry, &epd_jd79665_583_bwry,
+    &epd_uc8179_750_bwr,
 };
 
 epd_model_t* epd_init(epd_model_id_t id) {
@@ -321,7 +307,10 @@ epd_model_t* epd_init(epd_model_id_t id) {
             epd = epd_models[i];
         }
     }
-    if (epd == NULL) epd = epd_models[0];
+    // This build is dedicated to the 800x480 UC8179 black/white/red panel.
+    // Keep accepting the legacy model byte, but always fall back to the only
+    // driver compiled into the image.
+    if (epd == NULL) epd = &epd_uc8179_750_bwr;
     epd->drv->init(epd);
     return epd;
 }

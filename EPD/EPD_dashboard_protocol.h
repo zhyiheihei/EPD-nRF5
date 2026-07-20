@@ -14,6 +14,7 @@ typedef enum {
     EPD_CMD_DASH_BITMAP = 0x42,
     EPD_CMD_DASH_COMMIT = 0x43,
     EPD_CMD_DASH_ABORT = 0x44,
+    EPD_CMD_DASH_SYNC_TIME = 0x45,
     EPD_NOTIFY_DASH_RESPONSE = 0xC0,
 } epd_dashboard_command_t;
 
@@ -45,6 +46,15 @@ enum {
     EPD_DASH_BITMAP_BEGIN = 0x01,
     EPD_DASH_BITMAP_END = 0x02,
     EPD_DASH_BITMAP_INVERT = 0x04,
+};
+
+enum {
+    EPD_DASH_FEATURE_METADATA = 1u << 0,
+    EPD_DASH_FEATURE_BITMAPS = 1u << 1,
+    EPD_DASH_FEATURE_CRC16 = 1u << 2,
+    EPD_DASH_FEATURE_TRANSACTION = 1u << 3,
+    EPD_DASH_FEATURE_LOCAL_ICONS = 1u << 4,
+    EPD_DASH_FEATURE_SYNC_TIME = 1u << 5,
 };
 
 enum {
