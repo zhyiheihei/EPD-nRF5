@@ -729,12 +729,10 @@ int main(void) {
 
     NRF_LOG_DEBUG("done.\n");
 
-    if (m_resetreas & NRF_POWER_RESETREAS_DOG_MASK) {
-        m_epd.config.display_mode = MODE_CALENDAR;
-        ble_epd_on_timer(&m_epd, 0, true);
-    } else {
-        ble_epd_on_timer(&m_epd, m_timestamp, true);
-    }
+    // Do not touch the display during boot.  A panel/pin mismatch or a long
+    // BUSY period here can make the watchdog reset the application before it
+    // reaches the main loop, leaving the device apparently stuck in DFU mode.
+    // The dashboard protocol initializes and refreshes the panel on demand.
 
     for (;;) {
         app_sched_execute();
