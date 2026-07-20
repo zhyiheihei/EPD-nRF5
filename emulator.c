@@ -8,10 +8,10 @@
 
 #include "GUI.h"
 
-#define BITMAP_WIDTH 400
-#define BITMAP_HEIGHT 300
-#define WINDOW_WIDTH 450
-#define WINDOW_HEIGHT 380
+#define BITMAP_WIDTH 800
+#define BITMAP_HEIGHT 480
+#define WINDOW_WIDTH 850
+#define WINDOW_HEIGHT 560
 
 // Global variables
 HINSTANCE g_hInstance;
@@ -227,6 +227,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 .temperature = 25,
                 .voltage = 2920,
                 .ssid = "NRF_EPD_84AC",
+                .schedule_count = 6,
+                .schedules = {
+                    {g_display_time + 3600, "面包"},
+                    {g_display_time + 86400 + 9 * 3600, "牛奶"},
+                    {g_display_time + 2 * 86400 + 14 * 3600, "Family dinner"},
+                    {g_display_time + 3 * 86400 + 10 * 3600, "Weekly planning"},
+                    {g_display_time + 4 * 86400 + 16 * 3600, "Pick up package"},
+                    {g_display_time + 5 * 86400 + 11 * 3600, "Call supplier"},
+                },
+                .food_count = 4,
+                .foods = {
+                    {g_display_time + 2 * 86400, "牛奶", FOOD_TYPE_DRINK},
+                    {g_display_time + 5 * 86400, "咖啡", FOOD_TYPE_DRINK},
+                    {g_display_time + 12 * 86400, "巧克力", FOOD_TYPE_FOOD},
+                    {g_display_time + 7 * 86400, "面包", FOOD_TYPE_FOOD},
+                },
             };
 
             // Call DrawGUI to render the interface

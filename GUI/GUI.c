@@ -305,6 +305,150 @@ static void DrawCalendar(Adafruit_GFX* gfx, tm_t* tm, struct Lunar_Date* Lunar, 
     DrawMonthDays(gfx, 10, large ? 84 : 64, tm, Lunar, data);
 }
 
+static void DrawDashboardText(Adafruit_GFX* gfx, int16_t x, int16_t y, const char* text, uint16_t color) {
+    GFX_setFont(gfx, u8g2_font_wqy12_t_dashboard);
+    GFX_setFontMode(gfx, 1);
+    GFX_setTextColor(gfx, color, GFX_WHITE);
+    GFX_drawUTF8(gfx, x, y, text);
+    GFX_drawUTF8(gfx, x + 1, y, text);
+}
+
+static void DrawPanelTitle(Adafruit_GFX* gfx, int16_t x, int16_t y, int16_t w, const char* title) {
+    GFX_fillRect(gfx, x + 1, y + 1, w - 2, 33, GFX_WHITE);
+    GFX_drawFastHLine(gfx, x + 12, y + 33, w - 24, GFX_RED);
+    DrawDashboardText(gfx, x + 14, y + 23, title, GFX_BLACK);
+}
+
+static void DrawSchedulePanel(Adafruit_GFX* gfx, int16_t x, int16_t y, int16_t w, int16_t h, gui_data_t* data) {
+    GFX_drawRoundRect(gfx, x, y, w, h, 5, GFX_BLACK);
+    DrawPanelTitle(gfx, x, y, w, "日程");
+
+    GFX_setFont(gfx, u8g2_font_wqy12_t_dashboard);
+    if (data->schedule_count == 0) {
+        GFX_setTextColor(gfx, GFX_BLACK, GFX_WHITE);
+        GFX_setCursor(gfx, x + 16, y + 68);
+        GFX_printf(gfx, "No upcoming events");
+        return;
+    }
+
+    uint8_t count = data->schedule_count > 2 ? 2 : data->schedule_count;
+    const int16_t content_y = y + 34;
+    const int16_t row_h = (h - 34) / 2;
+    const int16_t line_h = GFX_getFontHeight(gfx);
+    const int16_t ascent = GFX_getFontAscent(gfx);
+    for (uint8_t i = 0; i < count; i++) {
+        tm_t event_time = {0};
+        transformTime(data->schedules[i].start_time, &event_time);
+        int16_t row_y = content_y + i * row_h;
+        int16_t text_y = row_y + (row_h - (2 * line_h + 4)) / 2 + ascent;
+        GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
+        GFX_setCursor(gfx, x + 14, text_y);
+        GFX_printf(gfx, "%02d/%02d %02d:%02d", event_time.tm_mon + 1, event_time.tm_mday, event_time.tm_hour,
+                   event_time.tm_min);
+        DrawDashboardText(gfx, x + 14, text_y + line_h + 4, data->schedules[i].title, GFX_BLACK);
+        if (i + 1 < count)
+            GFX_drawDottedLine(gfx, x + 14, row_y + row_h - 1, x + w - 14, row_y + row_h - 1, GFX_BLACK, 1, 4);
+    }
+}
+
+static void DrawDrinkIcon(Adafruit_GFX* gfx, int16_t x, int16_t y, uint16_t accent) {
+    (void)accent;
+    // Cup and straw: a universal drink symbol.
+    GFX_drawLine(gfx, x + 18, y + 9, x + 23, y + 2, GFX_BLACK);
+    GFX_drawLine(gfx, x + 19, y + 10, x + 24, y + 3, GFX_BLACK);
+    GFX_drawFastHLine(gfx, x + 5, y + 9, 19, GFX_BLACK);
+    GFX_drawFastHLine(gfx, x + 5, y + 10, 19, GFX_BLACK);
+    GFX_drawLine(gfx, x + 7, y + 11, x + 10, y + 28, GFX_BLACK);
+    GFX_drawLine(gfx, x + 8, y + 11, x + 11, y + 27, GFX_BLACK);
+    GFX_drawLine(gfx, x + 22, y + 11, x + 19, y + 28, GFX_BLACK);
+    GFX_drawLine(gfx, x + 21, y + 11, x + 18, y + 27, GFX_BLACK);
+    GFX_drawFastHLine(gfx, x + 10, y + 28, 10, GFX_BLACK);
+    GFX_drawFastHLine(gfx, x + 11, y + 27, 8, GFX_BLACK);
+}
+
+static void DrawFoodIcon(Adafruit_GFX* gfx, int16_t x, int16_t y, uint16_t accent) {
+    (void)accent;
+    // Fork and knife: deliberately unlike the drink silhouette.
+    GFX_drawFastVLine(gfx, x + 7, y + 2, 9, GFX_BLACK);
+    GFX_drawFastVLine(gfx, x + 10, y + 2, 9, GFX_BLACK);
+    GFX_drawFastVLine(gfx, x + 13, y + 2, 9, GFX_BLACK);
+    GFX_drawLine(gfx, x + 7, y + 11, x + 10, y + 14, GFX_BLACK);
+    GFX_drawLine(gfx, x + 13, y + 11, x + 10, y + 14, GFX_BLACK);
+    GFX_drawFastVLine(gfx, x + 10, y + 14, 15, GFX_BLACK);
+    GFX_drawFastVLine(gfx, x + 11, y + 14, 15, GFX_BLACK);
+    GFX_drawLine(gfx, x + 21, y + 2, x + 17, y + 15, GFX_BLACK);
+    GFX_drawLine(gfx, x + 22, y + 2, x + 18, y + 16, GFX_BLACK);
+    GFX_drawFastVLine(gfx, x + 18, y + 16, 13, GFX_BLACK);
+    GFX_drawFastVLine(gfx, x + 19, y + 16, 13, GFX_BLACK);
+}
+
+static void DrawFoodPanel(Adafruit_GFX* gfx, int16_t x, int16_t y, int16_t w, int16_t h, gui_data_t* data) {
+    GFX_drawRoundRect(gfx, x, y, w, h, 5, GFX_BLACK);
+    DrawPanelTitle(gfx, x, y, w, "食品到期");
+
+    GFX_setFont(gfx, u8g2_font_wqy9_t_lunar);
+    if (data->food_count == 0) {
+        GFX_setTextColor(gfx, GFX_BLACK, GFX_WHITE);
+        GFX_setCursor(gfx, x + 16, y + 68);
+        GFX_printf(gfx, "No food records");
+        return;
+    }
+
+    uint8_t count = data->food_count > GUI_MAX_FOODS ? GUI_MAX_FOODS : data->food_count;
+    bool used[GUI_MAX_FOODS] = {false};
+    const int16_t content_y = y + 34;
+    const int16_t row_h = (h - 34) / GUI_MAX_FOODS;
+    GFX_setFont(gfx, u8g2_font_wqy12_t_dashboard);
+    const int16_t text_baseline_offset = (row_h - GFX_getFontHeight(gfx)) / 2 + GFX_getFontAscent(gfx);
+    for (uint8_t row = 0; row < count; row++) {
+        uint8_t nearest = 0xFF;
+        for (uint8_t i = 0; i < count; i++) {
+            if (!used[i] && (nearest == 0xFF || data->foods[i].expires_at < data->foods[nearest].expires_at)) nearest = i;
+        }
+        if (nearest == 0xFF) break;
+        used[nearest] = true;
+
+        int32_t seconds = (int32_t)data->foods[nearest].expires_at - (int32_t)data->timestamp;
+        int32_t days = seconds >= 0 ? (seconds + 86399) / 86400 : seconds / 86400;
+        int16_t row_y = content_y + row * row_h;
+        int16_t icon_y = row_y + (row_h - 30) / 2;
+        int16_t text_y = row_y + text_baseline_offset;
+        uint16_t color = days <= 2 ? GFX_RED : GFX_BLACK;
+
+        GFX_fillCircle(gfx, x + 13, row_y + row_h / 2, 2, color);
+        if (data->foods[nearest].type == FOOD_TYPE_DRINK) {
+            DrawDrinkIcon(gfx, x + 22, icon_y, color);
+        } else {
+            DrawFoodIcon(gfx, x + 22, icon_y, color);
+        }
+
+        DrawDashboardText(gfx, x + 58, text_y, data->foods[nearest].name, GFX_BLACK);
+
+        char remain[18] = {0};
+        if (days < 0)
+            snprintf(remain, sizeof(remain), "-%ld天", (long)-days);
+        else
+            snprintf(remain, sizeof(remain), "还剩%ld天", (long)days);
+        DrawDashboardText(gfx, x + w - GFX_getUTF8Width(gfx, remain) - 15, text_y, remain, color);
+
+        if (row + 1 < count)
+            GFX_drawDottedLine(gfx, x + 13, row_y + row_h - 1, x + w - 13, row_y + row_h - 1, GFX_BLACK, 1, 4);
+    }
+}
+
+static void DrawDashboard(Adafruit_GFX* gfx, tm_t* tm, struct Lunar_Date* Lunar, gui_data_t* data) {
+    const int16_t calendar_width = 420;
+    const int16_t panel_x = 430;
+    const int16_t panel_width = data->width - panel_x - 10;
+
+    gui_data_t calendar_data = *data;
+    calendar_data.width = calendar_width;
+    DrawCalendar(gfx, tm, Lunar, &calendar_data);
+    GFX_drawFastVLine(gfx, 424, 10, data->height - 20, GFX_BLACK);
+    DrawSchedulePanel(gfx, panel_x, 10, panel_width, 170, data);
+    DrawFoodPanel(gfx, panel_x, 190, panel_width, data->height - 200, data);
+}
+
 // clang-format off
 /* Routine to Draw Large 7-Segment formated number
    Contributed by William Zaggle.
@@ -441,7 +585,10 @@ void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data) {
 
         switch (data->mode) {
             case MODE_CALENDAR:
-                DrawCalendar(&gfx, &tm, &Lunar, data);
+                if (data->width >= 700)
+                    DrawDashboard(&gfx, &tm, &Lunar, data);
+                else
+                    DrawCalendar(&gfx, &tm, &Lunar, data);
                 break;
             case MODE_CLOCK:
                 DrawClock(&gfx, &tm, &Lunar, data);

@@ -1,5 +1,7 @@
 #include "fonts.h"
 
+#include "dashboard_font.inc"
+
 /*
   Fontname: -wenquanyi-wenquanyi bitmap song-bold-r-normal--12-120-75-75-P-119-ISO10646-1
   Copyright: (null)

@@ -22,6 +22,7 @@
 #include "nrf_sdh_ble.h"
 #endif
 #include "EPD_config.h"
+#include "EPD_dashboard_protocol.h"
 #include "EPD_driver.h"
 #include "GUI.h"
 #include "sdk_config.h"
