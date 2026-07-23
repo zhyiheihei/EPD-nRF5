@@ -82,6 +82,7 @@
 #define SCHED_QUEUE_SIZE                10                                              /**< Maximum number of events in the scheduler queue. */
 
 #define CLOCK_TIMER_INTERVAL             TIMER_TICKS(1000)                              /**< Clock timer interval (ticks). */
+#define BOOT_REFRESH_DELAY               TIMER_TICKS(3000)                              /**< Delay boot refresh until startup is complete. */
 
 #define DEAD_BEEF                        0xDEADBEEF                                     /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
@@ -98,6 +99,7 @@ static ble_uuid_t                        m_adv_uuids[] = {{BLE_UUID_EPD_SVC, \
 BLE_EPD_DEF(m_epd);                                                                     /**< Structure to identify the EPD Service. */
 static uint32_t                          m_timestamp = 1735689600;                      /**< Current timestamp. */
 APP_TIMER_DEF(m_clock_timer_id);                                                        /**< Clock timer. */
+APP_TIMER_DEF(m_boot_refresh_timer_id);                                                 /**< One-shot boot refresh timer. */
 static nrf_drv_wdt_channel_id            m_wdt_channel_id;
 static uint32_t                          m_wdt_last_feed_time = 0;
 static uint32_t                          m_resetreas;
@@ -227,6 +229,21 @@ static void clock_timer_timeout_handler(void* p_context) {
     ble_epd_on_timer(&m_epd, m_timestamp, false);
 }
 
+static void boot_refresh_timeout_handler(void* p_context) {
+    UNUSED_PARAMETER(p_context);
+
+    // Do not race a connected client that may be configuring or updating the
+    // panel. Retry until the device is idle.
+    if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
+        APP_ERROR_CHECK(app_timer_start(m_boot_refresh_timer_id, BOOT_REFRESH_DELAY, NULL));
+        return;
+    }
+
+    // Queue the display work through the scheduler so that the timer callback
+    // never performs a long, blocking panel refresh.
+    ble_epd_on_timer(&m_epd, m_timestamp, true);
+}
+
 /**@brief Function for the Event Scheduler initialization.
  */
 static void scheduler_init(void) { APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE); }
@@ -244,6 +261,8 @@ static void timers_init(void) {
 #endif
     // Create timers.
     APP_ERROR_CHECK(app_timer_create(&m_clock_timer_id, APP_TIMER_MODE_REPEATED, clock_timer_timeout_handler));
+    APP_ERROR_CHECK(
+        app_timer_create(&m_boot_refresh_timer_id, APP_TIMER_MODE_SINGLE_SHOT, boot_refresh_timeout_handler));
 }
 
 /**@brief Function for starting application timers.
@@ -729,10 +748,11 @@ int main(void) {
 
     NRF_LOG_DEBUG("done.\n");
 
-    // Do not touch the display during boot.  A panel/pin mismatch or a long
-    // BUSY period here can make the watchdog reset the application before it
-    // reaches the main loop, leaving the device apparently stuck in DFU mode.
-    // The dashboard protocol initializes and refreshes the panel on demand.
+    // Refresh only after all startup work is complete. If the watchdog caused
+    // this boot, leave the panel untouched to avoid a display-related reset loop.
+    if (!(m_resetreas & NRF_POWER_RESETREAS_DOG_MASK)) {
+        APP_ERROR_CHECK(app_timer_start(m_boot_refresh_timer_id, BOOT_REFRESH_DELAY, NULL));
+    }
 
     for (;;) {
         app_sched_execute();
