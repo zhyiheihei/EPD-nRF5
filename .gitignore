@@ -48,6 +48,7 @@ Keil/Objects/*
 Keil/_build*/
 _build/
 build/
+result
 
 # Debugger files
 # define exception below if needed
