@@ -1,0 +1,180 @@
+# nRF52 固件 GCC 构建（Linux/macOS 原生，Keil 之外的替代方案）
+# 目标设备：nRF52811_xxAA + S112 7.3.0 + UC8179 7.5 寸屏
+#
+# 用法:
+#   make -f Makefile.firmware          # 编译固件 (build/nrf52/EPD-nRF52.elf.hex)
+#   make -f Makefile.firmware ota      # 固件 + 蓝牙 OTA 包 (ota.zip / settings.hex / full.hex)
+#   make -f Makefile.firmware clean
+#
+# OTA 产物说明:
+#   *-ota.zip      蓝牙 DFU 升级包（Web 界面/html 或 nRF Connect 可直接升级）
+#   *-full.hex     SD + bootloader + 固件 + DFU settings 合并镜像（首次烧录用，只需烧一次）
+#   *-settings.hex bootloader DFU settings 页
+#
+# 依赖: arm-none-eabi-gcc、nrfutil 6.x、python3 + intelhex（NixOS 下 `nix develop` 一键就绪）
+
+CROSS   ?= arm-none-eabi-
+CC      := $(CROSS)gcc
+OBJCOPY := $(CROSS)objcopy
+SIZE    := $(CROSS)size
+NRFUTIL ?= nrfutil
+MERGEHEX ?= python3 tools/mergehex
+
+SDK52 = SDK/17.1.0_ddde560
+SD_HEX = $(SDK52)/components/softdevice/s112/hex/s112_nrf52_7.3.0_softdevice.hex
+BL_HEX = tools/bootloader/bl_nrf52811_xxaa_s112.hex
+KEY = tools/priv.pem
+
+# OTA 元数据与固件版本号统一从 EPD_service.h 的 APP_VERSION 读取（如 0x1F）
+APP_VERSION := $(shell sed -n 's/^#define[ \t]*APP_VERSION[ \t]*0x\([0-9A-Fa-f]*\).*/0x\1/p' EPD/EPD_service.h)
+VER_TAG := $(shell sed -n 's/^#define[ \t]*APP_VERSION[ \t]*0x\([0-9A-Fa-f]*\).*/\1/p' EPD/EPD_service.h | tr a-f A-F)
+FW_BASE := build/nrf52/EPD-nRF52
+OTA_ZIP := $(FW_BASE)-uc8179-v$(VER_TAG)-ota.zip
+
+SRCS = \
+	main.c \
+	EPD/EPD_config.c EPD/EPD_driver.c EPD/EPD_service.c EPD/UC81xx.c EPD/SSD16xx.c \
+	GUI/Adafruit_GFX.c GUI/u8g2_font.c GUI/fonts.c GUI/GUI.c GUI/Lunar.c \
+	$(SDK52)/components/ble/common/ble_advdata.c \
+	$(SDK52)/components/ble/ble_advertising/ble_advertising.c \
+	$(SDK52)/components/ble/common/ble_conn_params.c \
+	$(SDK52)/components/ble/common/ble_srv_common.c \
+	$(SDK52)/components/ble/nrf_ble_gatt/nrf_ble_gatt.c \
+	$(SDK52)/components/ble/ble_services/ble_dfu/ble_dfu.c \
+	$(SDK52)/components/ble/ble_services/ble_dfu/ble_dfu_unbonded.c \
+	$(SDK52)/integration/nrfx/legacy/nrf_drv_clock.c \
+	$(SDK52)/integration/nrfx/legacy/nrf_drv_spi.c \
+	$(SDK52)/modules/nrfx/soc/nrfx_atomic.c \
+	$(SDK52)/modules/nrfx/drivers/src/nrfx_clock.c \
+	$(SDK52)/modules/nrfx/drivers/src/nrfx_gpiote.c \
+	$(SDK52)/modules/nrfx/drivers/src/prs/nrfx_prs.c \
+	$(SDK52)/modules/nrfx/drivers/src/nrfx_spi.c \
+	$(SDK52)/modules/nrfx/drivers/src/nrfx_spim.c \
+	$(SDK52)/modules/nrfx/drivers/src/nrfx_wdt.c \
+	$(SDK52)/components/libraries/util/app_error.c \
+	$(SDK52)/components/libraries/util/app_error_handler_gcc.c \
+	$(SDK52)/components/libraries/util/app_error_weak.c \
+	$(SDK52)/components/libraries/scheduler/app_scheduler.c \
+	$(SDK52)/components/libraries/timer/app_timer2.c \
+	$(SDK52)/components/libraries/util/app_util_platform.c \
+	$(SDK52)/components/libraries/timer/drv_rtc.c \
+	$(SDK52)/components/libraries/util/nrf_assert.c \
+	$(SDK52)/components/libraries/atomic_fifo/nrf_atfifo.c \
+	$(SDK52)/components/libraries/atomic_flags/nrf_atflags.c \
+	$(SDK52)/components/libraries/atomic/nrf_atomic.c \
+	$(SDK52)/components/libraries/balloc/nrf_balloc.c \
+	$(SDK52)/components/libraries/bootloader/dfu/nrf_dfu_svci.c \
+	$(SDK52)/external/fprintf/nrf_fprintf.c \
+	$(SDK52)/external/fprintf/nrf_fprintf_format.c \
+	$(SDK52)/components/libraries/memobj/nrf_memobj.c \
+	$(SDK52)/components/libraries/pwr_mgmt/nrf_pwr_mgmt.c \
+	$(SDK52)/components/libraries/ringbuf/nrf_ringbuf.c \
+	$(SDK52)/components/libraries/experimental_section_vars/nrf_section_iter.c \
+	$(SDK52)/components/libraries/sortlist/nrf_sortlist.c \
+	$(SDK52)/components/libraries/strerror/nrf_strerror.c \
+	$(SDK52)/components/libraries/log/src/nrf_log_backend_rtt.c \
+	$(SDK52)/components/libraries/log/src/nrf_log_backend_serial.c \
+	$(SDK52)/components/libraries/log/src/nrf_log_default_backends.c \
+	$(SDK52)/components/libraries/log/src/nrf_log_frontend.c \
+	$(SDK52)/components/libraries/log/src/nrf_log_str_formatter.c \
+	$(SDK52)/external/segger_rtt/SEGGER_RTT.c \
+	$(SDK52)/external/segger_rtt/SEGGER_RTT_Syscalls_GCC.c \
+	$(SDK52)/external/segger_rtt/SEGGER_RTT_printf.c \
+	$(SDK52)/components/softdevice/common/nrf_sdh.c \
+	$(SDK52)/components/softdevice/common/nrf_sdh_ble.c \
+	$(SDK52)/components/softdevice/common/nrf_sdh_soc.c \
+	$(SDK52)/modules/nrfx/mdk/gcc_startup_nrf52811.S \
+	$(SDK52)/modules/nrfx/mdk/system_nrf52.c
+
+INC = \
+	-I. -IEPD -IGUI -I$(SDK52) \
+	-I$(SDK52)/components/ble/common \
+	-I$(SDK52)/components/ble/ble_advertising \
+	-I$(SDK52)/components/ble/nrf_ble_gatt \
+	-I$(SDK52)/components/ble/ble_services/ble_dfu \
+	-I$(SDK52)/components/libraries/atomic \
+	-I$(SDK52)/components/libraries/atomic_fifo \
+	-I$(SDK52)/components/libraries/atomic_flags \
+	-I$(SDK52)/components/libraries/balloc \
+	-I$(SDK52)/components/libraries/bootloader \
+	-I$(SDK52)/components/libraries/bootloader/ble_dfu \
+	-I$(SDK52)/components/libraries/bootloader/dfu \
+	-I$(SDK52)/components/libraries/delay \
+	-I$(SDK52)/components/libraries/fstorage \
+	-I$(SDK52)/components/libraries/fds \
+	-I$(SDK52)/components/libraries/experimental_section_vars \
+	-I$(SDK52)/components/libraries/log \
+	-I$(SDK52)/components/libraries/log/src \
+	-I$(SDK52)/components/libraries/memobj \
+	-I$(SDK52)/components/libraries/mutex \
+	-I$(SDK52)/components/libraries/pwr_mgmt \
+	-I$(SDK52)/components/libraries/ringbuf \
+	-I$(SDK52)/components/libraries/sortlist \
+	-I$(SDK52)/components/libraries/scheduler \
+	-I$(SDK52)/components/libraries/strerror \
+	-I$(SDK52)/components/libraries/svc \
+	-I$(SDK52)/components/libraries/timer \
+	-I$(SDK52)/components/libraries/util \
+	-I$(SDK52)/components/softdevice/common \
+	-I$(SDK52)/components/softdevice/s112/headers \
+	-I$(SDK52)/components/softdevice/s112/headers/nrf52 \
+	-I$(SDK52)/components/toolchain/cmsis/include \
+	-I$(SDK52)/external/fprintf \
+	-I$(SDK52)/external/segger_rtt \
+	-I$(SDK52)/integration/nrfx \
+	-I$(SDK52)/integration/nrfx/legacy \
+	-I$(SDK52)/modules/nrfx \
+	-I$(SDK52)/modules/nrfx/mdk \
+	-I$(SDK52)/modules/nrfx/drivers/include \
+	-I$(SDK52)/modules/nrfx/hal
+
+DEFINES = \
+	APP_TIMER_V2 APP_TIMER_V2_RTC1_ENABLED CONFIG_GPIO_AS_PINRESET DEVELOP_IN_NRF52840 \
+	FLOAT_ABI_SOFT NRF52811_XXAA NRFX_COREDEP_DELAY_US_LOOP_CYCLES=3 NRF_DFU_SVCI_ENABLED \
+	NRF_DFU_TRANSPORT_BLE=1 NRF_SD_BLE_API_VERSION=7 S112 SOFTDEVICE_PRESENT \
+	__HEAP_SIZE=8192 __STACK_SIZE=2048
+
+CFLAGS = -std=gnu99 -Os -g3 -Wall -ffunction-sections -fdata-sections \
+	-mcpu=cortex-m4 -mthumb -mfloat-abi=soft $(addprefix -D,$(DEFINES)) $(INC)
+LDFLAGS = -mcpu=cortex-m4 -mthumb -T $(SDK52)/gcc_nrf52.ld \
+	-L$(SDK52)/modules/nrfx/mdk -Wl,--gc-sections --specs=nano.specs
+
+OBJS = $(addprefix build/nrf52/,$(addsuffix .o,$(basename $(SRCS))))
+
+all: fw
+fw: $(FW_BASE).elf.hex
+
+ota: $(OTA_ZIP) $(FW_BASE)-full.hex
+
+build/nrf52/%.o: %.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+build/nrf52/%.o: %.S
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(FW_BASE).elf: $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ -Wl,-Map,$@.map
+
+$(FW_BASE).elf.hex: $(FW_BASE).elf
+	$(OBJCOPY) -O ihex $< $@
+	$(SIZE) $<
+
+$(OTA_ZIP): $(FW_BASE).elf.hex
+	$(NRFUTIL) pkg generate --application $< --key-file $(KEY) \
+		--hw-version 52 --sd-req 0x126 --sd-id 0x126 \
+		--application-version $(APP_VERSION) $@
+
+$(FW_BASE)-settings.hex: $(FW_BASE).elf.hex $(SD_HEX)
+	$(NRFUTIL) settings generate --family NRF52810 --application $< --softdevice $(SD_HEX) \
+		--application-version $(APP_VERSION) --bootloader-version 1 --bl-settings-version 1 \
+		--key-file $(KEY) --no-backup $@
+
+$(FW_BASE)-full.hex: $(FW_BASE).elf.hex $(SD_HEX) $(BL_HEX) $(FW_BASE)-settings.hex
+	$(MERGEHEX) -m $(SD_HEX) $(BL_HEX) $< $(FW_BASE)-settings.hex -o $@
+
+clean:
+	rm -rf build/nrf52
+
+.PHONY: all fw ota clean

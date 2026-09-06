@@ -43,9 +43,25 @@ Modify `sdk_config.h`:
 #define NRF_SDH_CLOCK_LF_ACCURACY 7
 ```
 
+### Building Firmware with GCC (Linux / macOS)
+
+Firmware can also be built without Keil using the GCC cross toolchain, which additionally produces signed Bluetooth OTA packages:
+
+1. Install `arm-none-eabi-gcc` (GCC 13 recommended), `nrfutil` 6.x, and `python3 -m pip install intelhex`. On NixOS/Nix, simply run `nix develop` in the project root to get everything ready.
+2. `make -f Makefile.firmware` builds the firmware to `build/nrf52/EPD-nRF52.elf.hex`.
+3. `make -f Makefile.firmware ota` additionally generates:
+
+- `build/nrf52/EPD-nRF52-uc8179-vXX-ota.zip`: Bluetooth DFU package, can be sent to the device via the web interface or nRF Connect
+- `build/nrf52/EPD-nRF52-full.hex`: merged softdevice + bootloader + firmware + DFU settings image, flash it once with a programmer (then further updates can go through OTA)
+- `build/nrf52/EPD-nRF52-settings.hex`: bootloader DFU settings page
+
+The OTA package version is read from `APP_VERSION` in `EPD/EPD_service.h` automatically.
+
+> **Note:** OTA packages must be signed with the matching private key (`tools/priv.pem`). nrfutil must be version 6.x, the 8.x rewrite removed the legacy `pkg generate` / `settings generate` commands.
+
 ### Emulator
 
-This project provides an emulator that can run GUI code on Windows, allowing you to view the effects after modifying the GUI code without downloading to the microcontroller.
+This project provides an SDL2-based emulator that runs the GUI code on Windows, Linux and macOS, allowing you to view the effects after modifying the GUI code without downloading to the microcontroller.
 
 Emulation screenshot:
 
@@ -54,14 +70,12 @@ Emulation screenshot:
 
 **Compiling:**
 
-After downloading and installing [MSYS2](https://www.msys2.org), open the `MSYS2 MINGW64` command window and execute the following commands to install dependencies:
+- Windows: install [MSYS2](https://www.msys2.org), open the `MSYS2 MINGW64` command window and run `pacman -Syu mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 mingw-w64-x86_64-pkg-config`
+- Linux/macOS: install `gcc`, `make`, `pkg-config` and SDL2 via the system package manager (NixOS/Nix users: `nix develop`)
 
-```bash
-pacman -Syu
-pacman -S make mingw-w64-x86_64-gcc
-```
+Then `cd` to the project directory and execute `make` to build `build/emu/emulator`.
 
-Then `cd` to the project directory and execute `make` to compile the emulator executable.
+**Usage:** run `./build/emu/emulator` (space switches clock/calendar mode, `R` toggles red/black/white, `W` changes the week start, arrow keys adjust date/month). Running `./build/emu/emulator out.ppm` renders a frame to a PPM image headlessly and exits, which is also used as a CI smoke test.
 
 **Modifying the GUI:**
 

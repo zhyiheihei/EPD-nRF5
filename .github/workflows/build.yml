@@ -5,7 +5,32 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build emulator (headless smoke test)
+        run: |
+          nix develop -c make
+          nix develop -c env SDL_VIDEODRIVER=dummy ./build/emu/emulator emulator.ppm
+      - name: Build firmware + OTA package
+        run: nix develop -c make -f Makefile.firmware ota
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPD-nRF52-ota
+          path: |
+            build/nrf52/*.zip
+            build/nrf52/EPD-nRF52-full.hex
+            build/nrf52/EPD-nRF52.elf.hex
+            build/nrf52/EPD-nRF52-settings.hex
+
+  windows:
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -17,9 +42,15 @@ jobs:
           install: >-
             make
             mingw-w64-x86_64-gcc
-      - name: Build
-        run: make
-      - uses: actions/upload-artifact@v4
+            mingw-w64-x86_64-SDL2
+            mingw-w64-x86_64-pkg-config
+      - name: Build emulator
+        shell: msys2 {0}
+        run: |
+          make
+          SDL_VIDEODRIVER=dummy ./build/emu/emulator emulator.ppm
+      - name: Upload emulator
+        uses: actions/upload-artifact@v4
         with:
-          name: emulator
-          path: emulator.exe
+          name: emulator-windows
+          path: build/emu/emulator.exe
