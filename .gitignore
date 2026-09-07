@@ -92,4 +92,4 @@ result
 !tools/*.bat
 RTE_Components.h
 EventRecorderStub.scvd
-JLinkLog.txt
+JLinkLog.txtnrf52
