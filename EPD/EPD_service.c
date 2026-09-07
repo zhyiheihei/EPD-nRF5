@@ -117,6 +117,11 @@ static void epd_gui_render(ble_epd_t* p_epd, uint32_t render_timestamp, bool ref
         epd->drv->sleep(epd);
         nrf_delay_ms(200);
         EPD_GPIO_Uninit();
+    } else {
+        // 渲染完毕即释放面板供电与 LED：内容保留在屏上，无需保持连接期间供电
+        epd->drv->sleep(epd);
+        nrf_delay_ms(50);
+        EPD_GPIO_Uninit();
     }
 
     app_feed_wdt();
@@ -148,7 +153,8 @@ static bool dash_asset_position(uint8_t asset, uint16_t* x, uint16_t* y) {
  */
 static void on_connect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
     p_epd->conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
-    EPD_GPIO_Init();
+    // 不再立即初始化面板 GPIO（LED 常亮即供电状态）：无渲染活动时保持
+    // 引用为 0，LED 熄灭；渲染按需点亮、完成即释放（见 epd_gui_render）。
 }
 
 /**@brief Function for handling the @ref BLE_GAP_EVT_DISCONNECTED event from the S110 SoftDevice.
@@ -159,9 +165,10 @@ static void on_connect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
 static void on_disconnect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
     UNUSED_PARAMETER(p_ble_evt);
     p_epd->conn_handle = BLE_CONN_HANDLE_INVALID;
-    if (p_epd->epd) {
+    if (p_epd->epd && p_epd->epd->drv->read_busy(p_epd->epd) == false) {
+        // 面板仍在执行波形（BUSY 有效）才需要等待；否则直接休眠收尾
         p_epd->epd->drv->sleep(p_epd->epd);
-        nrf_delay_ms(200);  // for sleep
+        nrf_delay_ms(200);
     }
     EPD_GPIO_Uninit();
 }
