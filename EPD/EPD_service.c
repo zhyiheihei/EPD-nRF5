@@ -623,9 +623,11 @@ uint32_t ble_epd_string_send(ble_epd_t* p_epd, uint8_t* p_string, uint16_t lengt
 }
 
 void ble_epd_on_timer(ble_epd_t* p_epd, uint32_t timestamp, bool force_update) {
-    // Update calendar on 00:00:00, clock on every minute
-    if (force_update || (p_epd->config.display_mode == MODE_CALENDAR && timestamp % 86400 == 0) ||
-        (p_epd->config.display_mode == MODE_CLOCK && timestamp % 60 == 0)) {
+    // 仅响应显式请求（boot refresh / 上位机 COMMIT 后由上位机决定何时刷新）。
+    // 不做午夜自动刷新：固件 GUI 数据不含上位机位图，午夜全刷会把服务端推的
+    // 食品名称位图盖掉；日期/倒计时/残影更新全部由上位机 0 点推送全刷负责。
+    (void)timestamp;
+    if (force_update) {
         epd_gui_update_event_t event = {p_epd, timestamp};
         app_sched_event_put(&event, sizeof(epd_gui_update_event_t), epd_gui_update);
     }
