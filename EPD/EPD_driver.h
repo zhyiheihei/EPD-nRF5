@@ -168,6 +168,7 @@ typedef struct epd_driver {
                         uint16_t h);                                              /**< write image */
     void (*write_ram)(epd_model_t* epd, uint8_t cfg, uint8_t* data, uint8_t len); /* write data to epd ram */
     void (*refresh)(epd_model_t* epd);     /**< Sends the image buffer in RAM to e-Paper and displays */
+    void (*refresh_partial)(epd_model_t* epd, uint16_t x, uint16_t y, uint16_t w, uint16_t h); /**< 局部刷新（NULL = 不支持） */
     void (*sleep)(epd_model_t* epd);       /**< Enter sleep mode */
     int8_t (*read_temp)(epd_model_t* epd); /**< Read temperature from driver chip */
     bool (*read_busy)(epd_model_t* epd);   /**< Read busy pin level */

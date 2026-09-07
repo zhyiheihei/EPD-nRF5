@@ -192,7 +192,7 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
                                 EPD_DASH_MAX_FOODS, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
             uint16_t features = EPD_DASH_FEATURE_METADATA | EPD_DASH_FEATURE_BITMAPS | EPD_DASH_FEATURE_CRC16 |
                                 EPD_DASH_FEATURE_TRANSACTION | EPD_DASH_FEATURE_LOCAL_ICONS |
-                                EPD_DASH_FEATURE_SYNC_TIME;
+                                EPD_DASH_FEATURE_SYNC_TIME | EPD_DASH_FEATURE_PARTIAL_REFRESH;
             dash_put16(&caps[4], EPD_DASH_MAX_BITMAP_BYTES);
             dash_put16(&caps[6], features);
             dash_put16(&caps[8], p_epd->max_data_len);
@@ -319,7 +319,15 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
             p_epd->config.week_start = m_dashboard.week_start;
             epd_update_display_mode(p_epd, MODE_CALENDAR);
             dash_response(p_epd, tx, EPD_CMD_DASH_COMMIT, EPD_DASH_STATUS_OK, NULL, 0);
-            if (p_data[3] & EPD_DASH_COMMIT_REFRESH) p_epd->epd->drv->refresh(p_epd->epd);
+            if (p_data[3] & EPD_DASH_COMMIT_PARTIAL) {
+                // 局部刷新：只更新食品面板内容区，避开红/白区域的全屏闪烁
+                if (p_epd->epd->drv->refresh_partial && p_epd->epd->width == 800 && p_epd->epd->height == 480)
+                    p_epd->epd->drv->refresh_partial(p_epd->epd, EPD_DASH_PARTIAL_X, EPD_DASH_PARTIAL_Y,
+                                                  EPD_DASH_PARTIAL_W, EPD_DASH_PARTIAL_H);
+                else if (p_data[3] & EPD_DASH_COMMIT_REFRESH)
+                    p_epd->epd->drv->refresh(p_epd->epd);
+            } else if (p_data[3] & EPD_DASH_COMMIT_REFRESH)
+                p_epd->epd->drv->refresh(p_epd->epd);
             if (p_data[3] & EPD_DASH_COMMIT_SLEEP) {
                 p_epd->epd->drv->sleep(p_epd->epd);
                 nrf_delay_ms(200);

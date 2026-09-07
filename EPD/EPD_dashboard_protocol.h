@@ -55,11 +55,21 @@ enum {
     EPD_DASH_FEATURE_TRANSACTION = 1u << 3,
     EPD_DASH_FEATURE_LOCAL_ICONS = 1u << 4,
     EPD_DASH_FEATURE_SYNC_TIME = 1u << 5,
+    EPD_DASH_FEATURE_PARTIAL_REFRESH = 1u << 6,
 };
 
 enum {
     EPD_DASH_COMMIT_REFRESH = 0x01,
     EPD_DASH_COMMIT_SLEEP = 0x02,
+    EPD_DASH_COMMIT_PARTIAL = 0x04,
 };
+
+// 局部刷新区域：800x480 看板布局下食品面板的四行内容区（名称/图标/倒计时），
+// 与 GUI.c DrawDashboard 的 DrawFoodPanel(panel_x=430, y=190, w=360, h=280) 对齐，
+// 刻意避开顶部的红色标题线，使局部窗口内仅含黑白像素。
+#define EPD_DASH_PARTIAL_X 424
+#define EPD_DASH_PARTIAL_Y 216
+#define EPD_DASH_PARTIAL_W 372
+#define EPD_DASH_PARTIAL_H 260
 
 #endif
