@@ -86,7 +86,7 @@ static void dash_response(ble_epd_t* p_epd, uint8_t tx, uint8_t command, epd_das
     (void)ble_epd_string_send(p_epd, response, 5 + payload_len);
 }
 
-static void epd_gui_render(ble_epd_t* p_epd, uint32_t render_timestamp, bool refresh, bool sleep) {
+static void epd_gui_render(ble_epd_t* p_epd, uint32_t render_timestamp, bool refresh, bool hold) {
     EPD_GPIO_Init();
     epd_model_t* epd = epd_init((epd_model_id_t)p_epd->config.model_id);
     gui_data_t data = {
@@ -113,14 +113,13 @@ static void epd_gui_render(ble_epd_t* p_epd, uint32_t render_timestamp, bool ref
 
     DrawGUI(&data, (buffer_callback)epd->drv->write_image, epd);
     if (refresh) epd->drv->refresh(epd);
-    if (sleep) {
+    if (hold) {
+        // 看板 BEGIN 渲染：保持面板供电，后续 BITMAP 阶段与 COMMIT 刷新仍需 SPI；
+        // 供电释放由 COMMIT（SLEEP 标志）或断开收尾负责。
+    } else {
+        // 独立 GUI 刷新（定时器事件）：刷新即完成，释放供电与 LED
         epd->drv->sleep(epd);
         nrf_delay_ms(200);
-        EPD_GPIO_Uninit();
-    } else {
-        // 渲染完毕即释放面板供电与 LED：内容保留在屏上，无需保持连接期间供电
-        epd->drv->sleep(epd);
-        nrf_delay_ms(50);
         EPD_GPIO_Uninit();
     }
 
@@ -129,7 +128,7 @@ static void epd_gui_render(ble_epd_t* p_epd, uint32_t render_timestamp, bool ref
 
 static void epd_gui_update(void* p_event_data, uint16_t event_size) {
     epd_gui_update_event_t* event = (epd_gui_update_event_t*)p_event_data;
-    epd_gui_render(event->p_epd, event->timestamp, true, true);
+    epd_gui_render(event->p_epd, event->timestamp, true, false);
 }
 
 static bool dash_asset_position(uint8_t asset, uint16_t* x, uint16_t* y) {
@@ -255,7 +254,7 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
                 m_dashboard_staging.foods[slot].expires_at = dash_be32(&p_data[offset + 2]) + timezone_seconds;
             }
             m_dashboard = m_dashboard_staging;
-            epd_gui_render(p_epd, m_dashboard.local_timestamp, false, false);
+            epd_gui_render(p_epd, m_dashboard.local_timestamp, false, true);
             dash_response(p_epd, tx, EPD_CMD_DASH_BEGIN, EPD_DASH_STATUS_OK, NULL, 0);
         } break;
 
@@ -387,6 +386,8 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
 #endif
 
         case EPD_CMD_INIT:
+            // v25 起连接不再自动上电：首次真正操作面板（INIT）时按需初始化 GPIO
+            EPD_GPIO_Init();
             p_epd->epd = epd_init((epd_model_id_t)(length > 1 ? p_data[1] : p_epd->config.model_id));
             p_epd->config.model_id = p_epd->epd->id;
             epd_send_mtu(p_epd);
