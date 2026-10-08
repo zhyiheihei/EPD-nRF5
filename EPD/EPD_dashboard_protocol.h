@@ -15,6 +15,7 @@ typedef enum {
     EPD_CMD_DASH_COMMIT = 0x43,
     EPD_CMD_DASH_ABORT = 0x44,
     EPD_CMD_DASH_SYNC_TIME = 0x45,
+    EPD_CMD_DASH_STATUS = 0x46,
     EPD_NOTIFY_DASH_RESPONSE = 0xC0,
 } epd_dashboard_command_t;
 

@@ -102,7 +102,9 @@ APP_TIMER_DEF(m_clock_timer_id);                                                
 APP_TIMER_DEF(m_boot_refresh_timer_id);                                                 /**< One-shot boot refresh timer. */
 static nrf_drv_wdt_channel_id            m_wdt_channel_id;
 static uint32_t                          m_wdt_last_feed_time = 0;
-static uint32_t                          m_resetreas;
+uint32_t                                 m_resetreas;
+uint32_t                                 m_boot_count = 1;   /**< 连续复位计数（断电冷启动归 1，GPREGRET 跨软复位累计） */
+uint32_t                                 m_uptime_seconds = 0; /**< 本次运行秒数（时钟计时器逐秒递增，与 set_timestamp 跳变无关） */
 // clang-format on
 
 /**@brief Callback function for asserts in the SoftDevice.
@@ -225,6 +227,7 @@ static void clock_timer_timeout_handler(void* p_context) {
     UNUSED_PARAMETER(p_context);
 
     m_timestamp++;
+    m_uptime_seconds++;
 
     ble_epd_on_timer(&m_epd, m_timestamp, false);
 }
@@ -713,7 +716,7 @@ int main(void) {
 
     // Save reset reason.
     m_resetreas = NRF_POWER->RESETREAS;
-    NRF_POWER->RESETREAS |= NRF_POWER->RESETREAS;
+    NRF_POWER->RESETREAS = m_resetreas;
     NRF_LOG_DEBUG("== RESET REASON: %d ===\n", m_resetreas);
 
     NRF_LOG_DEBUG("init..\n");
@@ -743,6 +746,13 @@ int main(void) {
 
     // Start execution.
     application_timers_start();
+
+    // 连续复位计数：GPREGRET 跨软复位保留、断电后归 0；放在
+    // ble_stack_init 之后用 SD API 读写，服务端 DASH_STATUS 可读到。
+    uint32_t gpregret = 0;
+    (void)sd_power_gpregret_get(0, &gpregret);
+    m_boot_count = (gpregret >= 0xFF) ? 1 : (gpregret + 1);
+    (void)sd_power_gpregret_set(0, m_boot_count);
 
     advertising_start();
 

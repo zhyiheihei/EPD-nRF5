@@ -44,6 +44,8 @@ typedef struct {
 
 static epd_dashboard_data_t m_dashboard;
 static epd_dashboard_data_t m_dashboard_staging;
+static uint32_t m_connect_count = 0;        /**< 本次运行累计 BLE 连接次数 */
+static uint8_t m_last_disconnect_reason = 0; /**< 最近一次断开的 HCI 状态码 */
 
 typedef struct {
     bool active;
@@ -152,6 +154,7 @@ static bool dash_asset_position(uint8_t asset, uint16_t* x, uint16_t* y) {
  */
 static void on_connect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
     p_epd->conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
+    m_connect_count++;
     // 不再立即初始化面板 GPIO（LED 常亮即供电状态）：无渲染活动时保持
     // 引用为 0，LED 熄灭；渲染按需点亮、完成即释放（见 epd_gui_render）。
 }
@@ -162,8 +165,9 @@ static void on_connect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
  * @param[in] p_ble_evt Pointer to the event received from BLE stack.
  */
 static void on_disconnect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
-    UNUSED_PARAMETER(p_ble_evt);
     p_epd->conn_handle = BLE_CONN_HANDLE_INVALID;
+    // 记录断开原因（HCI 状态码），DASH_STATUS 暴露给服务端诊断
+    m_last_disconnect_reason = p_ble_evt->evt.gap_evt.params.disconnected.reason;
     if (p_epd->epd && p_epd->epd->drv->read_busy(p_epd->epd) == false) {
         // 面板仍在执行波形（BUSY 有效）才需要等待；否则直接休眠收尾
         p_epd->epd->drv->sleep(p_epd->epd);
@@ -351,6 +355,32 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
                 dash_response(p_epd, p_data[2], EPD_CMD_DASH_ABORT, EPD_DASH_STATUS_OK, NULL, 0);
             }
             break;
+
+        case EPD_CMD_DASH_STATUS: {
+            // 诊断状态块（v28）：服务端每次连接读取一次，记录到推送日志，
+            // 用于远端判断设备是否发生过复位/僵死、上次断开原因等。
+            // payload 16 字节：app_version | proto_version | boot_count(16) |
+            // uptime_s(32) | resetreas(32) | connect_count(16) | last_disconnect。
+            // 注意：应用闪存上限 0xE000（bootloader 保留区上界 0x27000），
+            // 这块代码已经贴着预算上限，新增功能先想替代方案。
+            if (length != 2 || p_data[1] != EPD_DASH_PROTOCOL_VERSION) {
+                dash_response(p_epd, 0, EPD_CMD_DASH_STATUS,
+                              length == 2 ? EPD_DASH_STATUS_BAD_VERSION : EPD_DASH_STATUS_BAD_LENGTH, NULL, 0);
+                break;
+            }
+            uint8_t st[16] = {0};
+            st[0] = APP_VERSION;
+            st[1] = EPD_DASH_PROTOCOL_VERSION;
+            dash_put16(&st[2], (uint16_t)app_boot_count());
+            dash_put16(&st[4], (uint16_t)(app_uptime_seconds() >> 16));
+            dash_put16(&st[6], (uint16_t)(app_uptime_seconds() & 0xFFFF));
+            dash_put16(&st[8], (uint16_t)(app_reset_reason() >> 16));
+            dash_put16(&st[10], (uint16_t)(app_reset_reason() & 0xFFFF));
+            dash_put16(&st[12], (uint16_t)m_connect_count);
+            st[14] = m_last_disconnect_reason;
+            st[15] = (uint8_t)p_epd->config.model_id;
+            dash_response(p_epd, 0, EPD_CMD_DASH_STATUS, EPD_DASH_STATUS_OK, st, sizeof(st));
+        } break;
 
         case EPD_CMD_DASH_SYNC_TIME: {
             uint8_t tx = length > 2 ? p_data[2] : 0;
