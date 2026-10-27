@@ -77,6 +77,11 @@ Then `cd` to the project directory and execute `make` to build `build/emu/emulat
 
 **Usage:** run `./build/emu/emulator` (space switches clock/calendar mode, `R` toggles red/black/white, `W` changes the week start, arrow keys adjust date/month). Running `./build/emu/emulator out.ppm` renders a frame to a PPM image headlessly and exits, which is also used as a CI smoke test.
 
+**Host-side GUI tests:** `make -f Makefile.test test` compiles the pure formatting helpers
+(e.g. `GUI_FormatScheduleLine`) with the host `gcc` and asserts their output — no SDL, no device.
+`tests/render_schedule_panel.sh` renders the dashboard headlessly (SDL dummy driver), crops the
+schedule panel and leaves a PNG for layout review.
+
 **Modifying the GUI:**
 
 After modifying the code in the GUI directory, simply re-execute the make command above to compile.
