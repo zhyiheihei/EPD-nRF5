@@ -82,7 +82,7 @@ static uint16_t dash_crc16(uint16_t crc, const uint8_t* data, uint16_t length) {
 
 static void dash_response(ble_epd_t* p_epd, uint8_t tx, uint8_t command, epd_dashboard_status_t status,
                           const uint8_t* payload, uint8_t payload_len) {
-    uint8_t response[19] = {EPD_NOTIFY_DASH_RESPONSE, EPD_DASH_PROTOCOL_VERSION, tx, command, status};
+    uint8_t response[21] = {EPD_NOTIFY_DASH_RESPONSE, EPD_DASH_PROTOCOL_VERSION, tx, command, status};
     if (payload_len > sizeof(response) - 5) payload_len = sizeof(response) - 5;
     if (payload_len) memcpy(&response[5], payload, payload_len);
     (void)ble_epd_string_send(p_epd, response, 5 + payload_len);
@@ -173,7 +173,9 @@ static void on_disconnect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
         p_epd->epd->drv->sleep(p_epd->epd);
         nrf_delay_ms(200);
     }
-    EPD_GPIO_Uninit();
+    // 强制归零：BEGIN 之后未 COMMIT 就断开（重试/中止）会漏掉引用计数，
+    // 用 Uninit 收不干净，面板供电与 LED 会一直保持
+    EPD_GPIO_Release();
 }
 
 static void epd_update_display_mode(ble_epd_t* p_epd, display_mode_t mode) {
@@ -353,6 +355,11 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
                 memset(&m_dashboard_staging, 0, sizeof(m_dashboard_staging));
                 memset(&m_dashboard_bitmap, 0, sizeof(m_dashboard_bitmap));
                 dash_response(p_epd, p_data[2], EPD_CMD_DASH_ABORT, EPD_DASH_STATUS_OK, NULL, 0);
+                // 中止后立即释放面板供电与 LED（不等断开）：BEGIN 已把驱动
+                // 引用计数加过一次，不释放就会一直亮着/耗电
+                if (p_epd->epd) p_epd->epd->drv->sleep(p_epd->epd);
+                nrf_delay_ms(200);
+                EPD_GPIO_Release();
             }
             break;
 

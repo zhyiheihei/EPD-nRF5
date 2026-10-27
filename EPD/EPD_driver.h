@@ -193,6 +193,7 @@ void pinMode(uint32_t pin, uint32_t mode);
 void EPD_GPIO_Load(epd_config_t* cfg);
 void EPD_GPIO_Init(void);
 void EPD_GPIO_Uninit(void);
+void EPD_GPIO_Release(void);
 
 // SPI
 void EPD_SPI_Write(uint8_t* value, uint8_t len);

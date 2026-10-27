@@ -57,6 +57,8 @@ void pinMode(uint32_t pin, uint32_t mode) {
 // GPIO
 static uint16_t m_driver_refs = 0;
 
+static void epd_gpio_teardown(void);
+
 void EPD_GPIO_Load(epd_config_t* cfg) {
     if (cfg == NULL) return;
     EPD_MOSI_PIN = cfg->mosi_pin;
@@ -105,8 +107,24 @@ void EPD_GPIO_Init(void) {
 }
 
 void EPD_GPIO_Uninit(void) {
+    // 引用计数为 0 时不能再减：uint16_t 下溢会把计数包成 65535，
+    // 之后 EPD_GPIO_Init 会被 "refs++ > 0" 永久早退，面板再也点不起来。
+    if (m_driver_refs == 0) return;
     if (--m_driver_refs > 0) return;
 
+    epd_gpio_teardown();
+}
+
+void EPD_GPIO_Release(void) {
+    // 强制收尾：不管引用计数还剩几次（BEGIN 之后未 COMMIT 就断开/中止会漏），
+    // 直接归零并断电、熄灯，避免面板电源与 LED 一直开着。
+    if (m_driver_refs == 0) return;
+    m_driver_refs = 0;
+
+    epd_gpio_teardown();
+}
+
+static void epd_gpio_teardown(void) {
     EPD_LED_OFF();
 
     nrf_drv_spi_uninit(&spi);
