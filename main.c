@@ -625,15 +625,41 @@ static void ble_options_set(void) {
 
 /**@brief Function for initializing the Advertising functionality.
  */
+// 面板内容只存在 RAM：上电/重启后为空，需要服务端重新推送。广播里带
+// manufacturer data（company 0xFFFF，1 字节：1=需要推送，0=已有内容），
+// 服务端定期被动扫描即可发现重启，不必为了探活去连设备。
+static uint8_t m_panel_dirty = 1;
+static uint8_t m_manuf_payload[1];
+static ble_advdata_manuf_data_t m_manuf_data;
+
+static void advdata_fill(ble_advdata_t* advdata) {
+    memset(advdata, 0, sizeof(*advdata));
+    m_manuf_payload[0] = m_panel_dirty ? 1U : 0U;
+    m_manuf_data.company_identifier = 0xFFFF;
+    m_manuf_data.data.size = sizeof(m_manuf_payload);
+    m_manuf_data.data.p_data = m_manuf_payload;
+    advdata->name_type = BLE_ADVDATA_FULL_NAME;
+    advdata->include_appearance = false;
+    advdata->flags = BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
+    advdata->p_manuf_specific_data = &m_manuf_data;
+}
+
+void app_notify_panel_data_ok(void) {
+    if (!m_panel_dirty) return;
+    m_panel_dirty = 0;
+    // 连接期间不广播，更新在下次 advertising_start 时生效
+    ble_advdata_t advdata;
+    advdata_fill(&advdata);
+    (void)ble_advertising_advdata_update(&m_advertising, &advdata, NULL);
+}
+
 static void advertising_init(void) {
 #if defined(S112)
     ble_advertising_init_t init;
 
     memset(&init, 0, sizeof(init));
 
-    init.advdata.name_type = BLE_ADVDATA_FULL_NAME;
-    init.advdata.include_appearance = false;
-    init.advdata.flags = BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
+    advdata_fill(&init.advdata);
 
     init.srdata.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
     init.srdata.uuids_complete.p_uuids = m_adv_uuids;
@@ -652,10 +678,7 @@ static void advertising_init(void) {
     ble_adv_modes_config_t options;
 
     // Build advertising data struct to pass into @ref ble_advertising_init.
-    memset(&advdata, 0, sizeof(advdata));
-    advdata.name_type = BLE_ADVDATA_FULL_NAME;
-    advdata.include_appearance = false;
-    advdata.flags = BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
+    advdata_fill(&advdata);
 
     memset(&scanrsp, 0, sizeof(scanrsp));
     scanrsp.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
