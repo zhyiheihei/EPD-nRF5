@@ -345,8 +345,6 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
                 nrf_delay_ms(200);
                 EPD_GPIO_Uninit();
             }
-            // 看板内容已落屏：广播里的「需要推送」标志可以清了
-            app_notify_panel_data_ok();
         } break;
 
         case EPD_CMD_DASH_ABORT:

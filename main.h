@@ -18,8 +18,4 @@ static inline uint32_t app_boot_count(void) { return m_boot_count; }
 static inline uint32_t app_uptime_seconds(void) { return m_uptime_seconds; }
 static inline uint32_t app_reset_reason(void) { return m_resetreas; }
 
-// 面板数据只存在 RAM，重启/OTA 后就空了：广播里带一个 manufacturer data
-// 标志位告诉服务端「我没有内容，请推」，COMMIT 成功后清零。
-void app_notify_panel_data_ok(void);
-
 #endif
