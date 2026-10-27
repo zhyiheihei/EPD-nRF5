@@ -248,6 +248,7 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
                     return;
                 }
                 m_dashboard_staging.schedules[slot].start_time = dash_be32(&p_data[offset + 2]) + timezone_seconds;
+                m_dashboard_staging.schedules[slot].end_time = dash_be32(&p_data[offset + 6]) + timezone_seconds;
             }
             for (uint8_t i = 0; i < foods; i++, offset += 6) {
                 uint8_t slot = p_data[offset];

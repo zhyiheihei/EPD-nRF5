@@ -19,6 +19,8 @@ typedef enum {
 
 typedef struct {
     uint32_t start_time;
+    // 结束时间：跨天日程要显示「几号 时:分 - 几号 时:分」
+    uint32_t end_time;
     char title[32];
 } gui_schedule_t;
 

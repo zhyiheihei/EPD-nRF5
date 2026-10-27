@@ -58,8 +58,8 @@ static void redraw(SDL_Renderer* ren, SDL_Texture* tex) {
         .ssid = "NRF_EPD_84AC",
         .schedule_count = 2,
         .schedules = {
-            {g_display_time + 3600, "面包"},
-            {g_display_time + 86400 + 9 * 3600, "牛奶"},
+            {g_display_time + 3600, g_display_time + 7200, "面包"},
+            {g_display_time + 86400 + 9 * 3600, g_display_time + 3 * 86400 + 18 * 3600, "牛奶"},
         },
         .food_count = 4,
         .foods = {

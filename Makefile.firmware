@@ -134,9 +134,9 @@ DEFINES = \
 	NRF_DFU_TRANSPORT_BLE=1 NRF_SD_BLE_API_VERSION=7 S112 SOFTDEVICE_PRESENT \
 	__HEAP_SIZE=8192 __STACK_SIZE=2048
 
-CFLAGS = -std=gnu99 -Os -g3 -Wall -ffunction-sections -fdata-sections \
+CFLAGS = -std=gnu99 -Os -g3 -Wall -ffunction-sections -fdata-sections -flto \
 	-mcpu=cortex-m4 -mthumb -mfloat-abi=soft $(addprefix -D,$(DEFINES)) $(INC)
-LDFLAGS = -mcpu=cortex-m4 -mthumb -T $(SDK52)/gcc_nrf52.ld \
+LDFLAGS = -mcpu=cortex-m4 -mthumb -flto -Os -T $(SDK52)/gcc_nrf52.ld \
 	-L$(SDK52)/modules/nrfx/mdk -Wl,--gc-sections --specs=nano.specs
 
 OBJS = $(addprefix build/nrf52/,$(addsuffix .o,$(basename $(SRCS))))
