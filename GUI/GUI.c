@@ -319,6 +319,26 @@ static void DrawPanelTitle(Adafruit_GFX* gfx, int16_t x, int16_t y, int16_t w, c
     DrawDashboardText(gfx, x + 14, y + 23, title, GFX_BLACK);
 }
 
+/** 日程行的时间文本：跨天画「起 月/日 时:分-止 月/日 时:分」，当天只画开始。
+ *  静态缓冲，调用点在渲染循环里串行使用。 */
+const char* GUI_FormatScheduleLine(uint32_t start_time, uint32_t end_time) {
+    static char line[40];
+    tm_t start_tm = {0};
+    tm_t end_tm = {0};
+    transformTime(start_time, &start_tm);
+    transformTime(end_time, &end_tm);
+    bool spans_days = end_time > start_time && (end_tm.tm_year != start_tm.tm_year || end_tm.tm_mon != start_tm.tm_mon ||
+                                                end_tm.tm_mday != start_tm.tm_mday);
+    if (spans_days) {
+        snprintf(line, sizeof(line), "%02d/%02d %02d:%02d-%02d/%02d %02d:%02d", start_tm.tm_mon + 1, start_tm.tm_mday,
+                 start_tm.tm_hour, start_tm.tm_min, end_tm.tm_mon + 1, end_tm.tm_mday, end_tm.tm_hour, end_tm.tm_min);
+    } else {
+        snprintf(line, sizeof(line), "%02d/%02d %02d:%02d", start_tm.tm_mon + 1, start_tm.tm_mday, start_tm.tm_hour,
+                 start_tm.tm_min);
+    }
+    return line;
+}
+
 static void DrawSchedulePanel(Adafruit_GFX* gfx, int16_t x, int16_t y, int16_t w, int16_t h, gui_data_t* data) {
     GFX_drawRoundRect(gfx, x, y, w, h, 5, GFX_BLACK);
     DrawPanelTitle(gfx, x, y, w, "日程");
@@ -337,25 +357,11 @@ static void DrawSchedulePanel(Adafruit_GFX* gfx, int16_t x, int16_t y, int16_t w
     const int16_t line_h = GFX_getFontHeight(gfx);
     const int16_t ascent = GFX_getFontAscent(gfx);
     for (uint8_t i = 0; i < count; i++) {
-        tm_t event_time = {0};
-        tm_t end_time = {0};
-        transformTime(data->schedules[i].start_time, &event_time);
-        transformTime(data->schedules[i].end_time, &end_time);
         int16_t row_y = content_y + i * row_h;
         int16_t text_y = row_y + (row_h - (2 * line_h + 4)) / 2 + ascent;
         GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
         GFX_setCursor(gfx, x + 14, text_y);
-        // 跨天日程显示「起 月/日 时:分 - 止 月/日 时:分」，当天只显示开始时间
-        if (data->schedules[i].end_time > data->schedules[i].start_time &&
-            (end_time.tm_year != event_time.tm_year || end_time.tm_mon != event_time.tm_mon ||
-             end_time.tm_mday != event_time.tm_mday)) {
-            GFX_printf(gfx, "%02d/%02d %02d:%02d-%02d/%02d %02d:%02d", event_time.tm_mon + 1, event_time.tm_mday,
-                       event_time.tm_hour, event_time.tm_min, end_time.tm_mon + 1, end_time.tm_mday, end_time.tm_hour,
-                       end_time.tm_min);
-        } else {
-            GFX_printf(gfx, "%02d/%02d %02d:%02d", event_time.tm_mon + 1, event_time.tm_mday, event_time.tm_hour,
-                       event_time.tm_min);
-        }
+        GFX_printf(gfx, "%s", GUI_FormatScheduleLine(data->schedules[i].start_time, data->schedules[i].end_time));
         DrawDashboardText(gfx, x + 14, text_y + line_h + 4, data->schedules[i].title, GFX_BLACK);
         if (i + 1 < count)
             GFX_drawDottedLine(gfx, x + 14, row_y + row_h - 1, x + w - 14, row_y + row_h - 1, GFX_BLACK, 1, 4);

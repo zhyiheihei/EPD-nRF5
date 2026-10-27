@@ -48,4 +48,7 @@ typedef struct {
 
 void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data);
 
+// 日程行时间文本（跨天显示起止，当天只显示开始）；返回静态缓冲
+const char* GUI_FormatScheduleLine(uint32_t start_time, uint32_t end_time);
+
 #endif

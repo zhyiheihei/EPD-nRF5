@@ -1,0 +1,13 @@
+CC ?= gcc
+# 宿主机单测：只编 GUI.c 的纯格式化逻辑（不含 SDL/渲染）
+SRCS = GUI/GUI.c GUI/Adafruit_GFX.c GUI/u8g2_font.c GUI/fonts.c GUI/Lunar.c tests/test_schedule_format.c
+CFLAGS = -O1 -Wall -IGUI -I. -D__HEAP_SIZE=32768
+
+test:
+	$(CC) $(CFLAGS) -o build/test-schedule $(SRCS) -lm
+	./build/test-schedule
+
+clean:
+	rm -f build/test-schedule
+
+.PHONY: test clean
